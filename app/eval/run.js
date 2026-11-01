@@ -57,10 +57,13 @@ async function runCase(c) {
 
   for (const [i, t] of turns.entries()) {
     const tag = turns.length > 1 ? `turn ${i + 1}: ` : '';
+    let pressedId = null;
     if (t.press_button) {
       const open = store.db.proposals.filter((p) => p.user_id === user.id && p.status === 'proposed').at(-1);
       if (!open) { toolPass = false; notes.push(`${tag}no proposal to press`); break; }
+      // Same as the server does for the button: accept, then the turn writes it.
       proposals.accept(user, open.id);
+      pressedId = open.id;
       pressed += 1;
     }
     for (const n of numbersIn(agent.systemPrompt(user))) known.add(n);
@@ -80,9 +83,11 @@ async function runCase(c) {
             }
           }
         }
-      });
+      }, { pressed: pressedId });
     } catch (err) {
       error = `${err.code || 'error'}: ${err.message}`;
+    } finally {
+      if (pressedId) proposals.release(user, pressedId);
     }
     allCalls.push(...calls);
     turnCalls.push(calls);

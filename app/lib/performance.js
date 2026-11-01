@@ -24,6 +24,7 @@ function livePosts(user) {
       return {
         id: p.id,
         date: p.created_at.slice(0, 10),
+        created_at: p.created_at,
         channel: p.channel,
         product_id: p.product_id,
         angle: p.angle,
@@ -45,7 +46,8 @@ const counts = (p) => !p.live || p.published || p.clicks > 0 || p.orders > 0;
 
 function allPosts(user) {
   const history = merchant.posts.map((p) => ({ ...p, live: false }));
-  return [...history, ...livePosts(user)].sort((a, b) => b.date.localeCompare(a.date) || (b.live - a.live));
+  const timestamp = (p) => Date.parse(p.created_at || `${p.date}T00:00:00.000Z`) || 0;
+  return [...history, ...livePosts(user)].sort((a, b) => timestamp(b) - timestamp(a) || (b.live - a.live));
 }
 
 function summarize(posts) {

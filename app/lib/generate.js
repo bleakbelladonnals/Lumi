@@ -72,15 +72,12 @@ function buildPrompt(user, product, channel, angle, notes) {
 }
 
 function parseVariants(text) {
-  const match = text.match(/\{[\s\S]*\}/);
-  if (!match) return null;
-  try {
-    const data = JSON.parse(match[0]);
-    const variants = (data.variants || []).filter((v) => v && typeof v.caption === 'string' && v.caption.trim());
-    return variants.length ? variants.slice(0, 3) : null;
-  } catch {
-    return null;
-  }
+  const data = llm.extractJson(text);
+  if (!data || !Array.isArray(data.variants) || data.variants.length !== 3) return null;
+  const variants = data.variants.filter((v) => v && typeof v.caption === 'string' && v.caption.trim());
+  if (variants.length !== 3) return null;
+  const captions = new Set(variants.map((v) => v.caption.trim().replace(/\s+/g, ' ').toLowerCase()));
+  return captions.size === 3 ? variants : null;
 }
 
 function fill(text, link, channel) {
@@ -117,7 +114,7 @@ async function generatePost(user, { product_id, channel = 'instagram', angle = '
       const text = await llm.completeJson({ messages: buildPrompt(user, product, channel, angle, notes), plan: user.plan });
       variants = parseVariants(text);
     }
-    if (!variants) throw Object.assign(new Error('The model returned an unreadable answer twice. No credit was used.'), { code: 'bad_output' });
+    if (!variants) throw Object.assign(new Error('The model did not return exactly 3 distinct, valid versions after two attempts. No credit was used.'), { code: 'bad_output' });
 
     const postId = store.id('post');
     const link = createLink(user, { product_id, channel, post_id: postId });
@@ -178,8 +175,7 @@ async function revisePost(user, { post_id, variant = 0, instruction }) {
     { role: 'user', content: JSON.stringify({ caption: original, hashtags: current.hashtags, instruction: String(instruction || '').slice(0, 500) }) },
   ];
   const text = await llm.completeJson({ messages, plan: user.plan });
-  let data = null;
-  try { data = JSON.parse(text.match(/\{[\s\S]*\}/)?.[0] || ''); } catch { /* handled below */ }
+  const data = llm.extractJson(text);
   if (!data || typeof data.caption !== 'string' || !data.caption.trim()) {
     throw Object.assign(new Error('The model returned an unreadable rewrite. Nothing changed.'), { code: 'bad_output' });
   }

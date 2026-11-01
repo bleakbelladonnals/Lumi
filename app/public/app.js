@@ -12,6 +12,12 @@ let catalog = null;
 let currentTab = 'home';
 let homePeriod = 30;
 let homeData = null;
+let resultsRequest = 0;
+
+function renderLoadError(el, retry) {
+  el.innerHTML = `<div class="card" role="alert"><h3>Could not load this page</h3><p class="small muted">Check your connection and try again.</p><button class="btn primary sm" data-retry>Try again</button></div>`;
+  el.querySelector('[data-retry]').addEventListener('click', retry);
+}
 
 // ---------- boot ----------
 
@@ -33,10 +39,13 @@ async function refreshMe() {
   renderHeader();
 }
 
+const shortDate = (iso) => new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
 function renderHeader() {
   const u = me.user;
   const q = u.quota;
-  $('#plan-pill').textContent = u.plan_info.name;
+  const sub = u.subscription;
+  $('#plan-pill').textContent = sub?.status === 'canceling' ? `Pro until ${shortDate(sub.ends_at)}` : u.plan_info.name;
   $('#plan-pill').className = 'pill ' + (u.plan === 'pro' ? 'accent' : '');
   $('#credits').textContent = `${q.left}/${q.limit} credits`;
   $('#meter span').style.width = (q.limit ? (q.left / q.limit) * 100 : 0) + '%';
@@ -79,6 +88,16 @@ function setupDemoBar() {
     renderHeader();
     toast(`${r.quota.left} credit${r.quota.left === 1 ? '' : 's'} left`);
     if (currentTab === 'plan') renderPlan();
+  };
+  $('#end-period').onclick = async () => {
+    try {
+      const r = await api('/api/demo/end-period', { method: 'POST' });
+      me.user = r.user;
+      renderHeader();
+      toast(r.user.plan === 'pro' ? 'Period ended: Pro renewed' : 'Period ended: back on Free');
+      homeData = null;
+      showTab(currentTab);
+    } catch (err) { toast(err.data?.error === 'no_subscription' ? 'No subscription yet' : err.message); }
   };
   $('#leave1').onclick = () => leave(1);
   $('#leave0').onclick = () => leave(0);
@@ -143,9 +162,18 @@ function lockCard(title, body, cta, trigger = 'feature') {
 
 async function renderHome() {
   const el = $('#home');
+  const requestedPeriod = homePeriod;
   if (!homeData) el.innerHTML = '<div class="card muted"><span class="spinner"></span> Loading…</div>';
-  homeData = await api(`/api/home?days=${homePeriod}`);
-  if (currentTab !== 'home') return;
+  try {
+    const data = await api(`/api/home?days=${requestedPeriod}`);
+    if (currentTab !== 'home' || requestedPeriod !== homePeriod) return;
+    homeData = data;
+  } catch {
+    if (currentTab === 'home' && requestedPeriod === homePeriod) {
+      renderLoadError(el, () => { homeData = null; renderHome(); });
+    }
+    return;
+  }
   const { summary: s, recommendation: rec, getting_started: steps, drafts } = homeData;
   const pro = !s.locked;
   track('report_viewed', { report_type: 'home', locked: s.locked, period_days: s.period_days });
@@ -249,8 +277,14 @@ async function loadWizInfo() {
 async function renderWizard() {
   if (!wizInfo) {
     $('#wizard').innerHTML = '<div class="card muted"><span class="spinner"></span> Loading…</div>';
-    await loadWizInfo();
+    try {
+      await loadWizInfo();
+    } catch {
+      if (currentTab === 'write') renderLoadError($('#wizard'), () => { wizInfo = null; renderWizard(); });
+      return;
+    }
   }
+  if (currentTab !== 'write') return;
   const { rec } = wizInfo;
   wiz.product ||= rec?.product_id || catalog.products[0].id;
   wiz.channel ||= rec?.channel || 'instagram';
@@ -370,19 +404,27 @@ function stepPost() {
 }
 
 async function generateFromWizard() {
+  if (wiz.busy) return;
   if (me.user.quota.left <= 0) { openPaywall('quota'); return; }
   wiz.notes = $('#wiz-notes')?.value.trim() || '';
+  // Same key for a retry of the same request, so the server returns the post instead of charging again.
+  const ask = JSON.stringify([wiz.product, wiz.channel, wiz.angle, wiz.notes]);
+  if (!wiz.request || wiz.request.ask !== ask) wiz.request = { ask, id: `req_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}` };
   wiz.busy = true;
   wiz.step = 3;
   renderWizard();
   try {
-    const r = await api('/api/generate', { method: 'POST', body: { product_id: wiz.product, channel: wiz.channel, angle: wiz.angle, notes: wiz.notes || undefined } });
+    const r = await api('/api/generate', { method: 'POST', body: { product_id: wiz.product, channel: wiz.channel, angle: wiz.angle, notes: wiz.notes || undefined, request_id: wiz.request.id } });
     me.user.quota = r.quota;
     renderHeader();
     wiz.post = r.post;
+    wiz.request = null;
   } catch (err) {
     wiz.step = 2;
-    if (err.status === 402) openPaywall('quota'); else toast(err.message);
+    // A server answer means nothing was written, so the next press is a new request. A lost connection
+    // keeps the key: the post may exist, and pressing again returns it without a second charge.
+    if (err.status) wiz.request = null;
+    if (err.status === 402) openPaywall('quota'); else toast(err.status ? err.message : 'Connection lost. Press again; you will not be charged twice.');
   } finally {
     wiz.busy = false;
     if (currentTab === 'write') renderWizard();
@@ -427,6 +469,15 @@ $('#wizard').addEventListener('click', async (e) => {
 
 // ---------- results ----------
 
+function subLine(u) {
+  const s = u.subscription;
+  if (!s) return '';
+  const what = `${money(s.price)} ${s.cycle === 'yearly' ? 'per year' : 'per month'}`;
+  return s.status === 'canceling'
+    ? `<div class="banner" style="margin:0 0 12px">Canceled. You keep Pro until <b>${shortDate(s.ends_at)}</b>, then move to Free. Changed your mind? Press Keep Pro.</div>`
+    : `<p class="muted" style="margin-bottom:4px">${what} · renews ${shortDate(s.renews_at)}</p>`;
+}
+
 function perfTable(posts) {
   return `<div class="table-wrap"><table class="posts"><thead><tr><th>Date</th><th>Post</th><th>Style</th><th class="num">Clicks</th><th class="num">Orders</th><th class="num">Revenue</th><th class="num">vs your average</th></tr></thead><tbody>${posts.map((p) =>
     `<tr><td class="small date" data-label="Date">${p.date}</td><td class="small post-cell">${esc((p.caption || '').slice(0, 90))}${(p.caption || '').length > 90 ? '…' : ''}<div class="faint">${esc(p.product)} · ${esc(channelName(p.channel))}${p.live ? ' · <span class="pill accent">via Lumi</span>' : ''}</div></td><td class="small" data-label="Style">${esc(p.angle_label)}</td><td class="num" data-label="Clicks">${num(p.clicks)}</td><td class="num" data-label="Orders">${num(p.orders)}</td><td class="num" data-label="Revenue">${money(p.revenue)}</td><td class="num" data-label="vs average">${deltaPill(p.vs_average_pct, p)}</td></tr>`).join('')}</tbody></table></div>`;
@@ -439,9 +490,17 @@ function bars(groups, labelOf) {
 
 async function renderResults() {
   const body = $('#results-body');
+  const request = ++resultsRequest;
   body.innerHTML = '<div class="card muted"><span class="spinner"></span> Loading…</div>';
   const pro = me.user.plan === 'pro';
-  const r = await api(`/api/results${pro ? '?group_by=angle' : ''}`);
+  let r;
+  try {
+    r = await api(`/api/results${pro ? '?group_by=angle' : ''}`);
+  } catch {
+    if (currentTab === 'results' && request === resultsRequest) renderLoadError(body, renderResults);
+    return;
+  }
+  if (currentTab !== 'results' || request !== resultsRequest) return;
   track('report_viewed', { report_type: 'dashboard', posts_with_data: r.posts.filter((p) => p.clicks || p.orders).length, locked: r.locked, total_posts: r.total_posts });
 
   if (r.locked) {
@@ -494,7 +553,8 @@ function renderPlan() {
     <div class="grid g2" style="align-items:start">
       <div class="card">
         <h2>Your plan: ${esc(u.plan_info.name)}</h2>
-        <p class="muted">${u.quota.used} of ${u.quota.limit} credits used in ${u.quota.period}. Writing a post uses 1; changing one is free. Credits reset on the 1st.</p>
+        ${subLine(u)}
+        <p class="muted">${u.quota.used} of ${u.quota.limit} credits used in ${u.quota.period}. Writing a post uses 1; changing one is free. Plan credits reset on the 1st; unused top-up credits carry over.</p>
         <div class="table-wrap"><table>
           <tr><th></th><th>Free</th><th>Pro</th></tr>
           <tr><td>Price</td><td>$0</td><td><b>$${P.pro.price}</b>/month or $${P.pro.priceYearlyPerMonth}/month yearly</td></tr>
@@ -505,7 +565,10 @@ function renderPlan() {
           <tr><td>Assistant messages per day</td><td>${P.free.chatMessagesPerDay}</td><td>${P.pro.chatMessagesPerDay}</td></tr>
         </table></div>
         <div class="row" style="margin-top:14px">
-          ${pro ? `<button class="btn" id="topup">Buy ${me.addon.generations} credits · $${me.addon.price}</button><button class="btn ghost" id="cancel">Cancel Pro</button>` : '<button class="btn primary" data-paywall="manual">Upgrade to Pro</button>'}
+          ${!pro ? '<button class="btn primary" data-paywall="manual">Upgrade to Pro</button>'
+            : u.subscription?.status === 'canceling'
+              ? `<button class="btn primary" id="resume">Keep Pro</button><button class="btn" id="topup">Buy ${me.addon.generations} credits · $${me.addon.price}</button>`
+              : `<button class="btn" id="topup">Buy ${me.addon.generations} credits · $${me.addon.price}</button><button class="btn ghost" id="cancel">Cancel Pro</button>`}
         </div>
       </div>
       <div class="card">
@@ -517,7 +580,14 @@ function renderPlan() {
       </div>
     </div>`;
   $('#topup')?.addEventListener('click', () => startCheckout('addon', 'monthly'));
-  $('#cancel')?.addEventListener('click', async () => { if (!confirm('Cancel Pro? You keep your tracked links.')) return; await api('/api/billing/cancel', { method: 'POST' }); await refreshMe(); renderPlan(); toast('Pro canceled'); });
+  $('#cancel')?.addEventListener('click', async () => {
+    const end = shortDate(u.subscription.current_period_end);
+    if (!confirm(`Cancel Pro? You keep Pro until ${end}, then move to Free. Your tracked links keep working.`)) return;
+    try { const r = await api('/api/billing/cancel', { method: 'POST' }); me.user = r.user; renderHeader(); renderPlan(); toast(`Canceled. Pro until ${end}`); } catch (err) { toast(err.message); }
+  });
+  $('#resume')?.addEventListener('click', async () => {
+    try { const r = await api('/api/billing/resume', { method: 'POST' }); me.user = r.user; renderHeader(); renderPlan(); toast('Pro will renew as usual'); } catch (err) { toast(err.message); await refreshMe(); renderPlan(); }
+  });
 }
 
 // ---------- assistant drawer ----------
@@ -664,8 +734,8 @@ function botBubble() {
   };
 }
 
-async function send(text) {
-  if (busy || !text.trim()) return;
+async function send(text, { proposalId } = {}) {
+  if (busy || !text.trim()) return false;
   openDrawer();
   busy = true;
   $('#send').disabled = true;
@@ -673,13 +743,14 @@ async function send(text) {
   const bubble = botBubble();
   bubble.thinking(true);
   let wrote = false;
+  let failed = false;
   try {
-    const res = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: text, page: currentTab }) });
+    const res = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: text, page: currentTab, proposal_id: proposalId }) });
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
       bubble.thinking(false);
       bubble.error(data.message || `Request failed (${res.status})`);
-      return;
+      return data.error === 'already_written' ? 'written' : false;
     }
     const reader = res.body.getReader();
     const dec = new TextDecoder();
@@ -701,14 +772,15 @@ async function send(text) {
           bubble.toolEnd(ev);
           if (ev.name === 'generate_post' && ev.ok) wrote = true;
           // A failed write leaves the proposal open, so its button works again.
-          if (ev.name === 'generate_post' && !ev.ok) $$('[data-accept]').forEach((b) => { if (b.dataset.accepted) { b.disabled = false; b.textContent = 'Write 3 versions · 1 credit'; delete b.dataset.accepted; } });
+          if (ev.name === 'generate_post' && !ev.ok && !['already_written', 'in_progress'].includes(ev.error)) resetAcceptButtons();
         }
         else if (ev.type === 'paywall') setTimeout(() => openPaywall('quota'), 600);
         else if (ev.type === 'quota' || ev.type === 'done') { me.user.quota = ev.quota; renderHeader(); }
-        else if (ev.type === 'error') bubble.error(ev.message);
+        else if (ev.type === 'error') { failed = true; bubble.error(ev.message); }
       }
     }
   } catch (err) {
+    failed = true;
     bubble.error('Connection lost. Try again.');
   } finally {
     bubble.thinking(false);
@@ -716,6 +788,11 @@ async function send(text) {
     $('#send').disabled = false;
     if (wrote) { homeData = null; wizInfo = null; }
   }
+  return wrote ? 'written' : !failed;
+}
+
+function resetAcceptButtons() {
+  $$('[data-accept]').forEach((b) => { if (b.dataset.accepted) { b.disabled = false; b.textContent = 'Write 3 versions · 1 credit'; delete b.dataset.accepted; } });
 }
 
 $('#composer').addEventListener('submit', (e) => { e.preventDefault(); const v = $('#input').value; $('#input').value = ''; send(v); });
@@ -733,6 +810,7 @@ document.addEventListener('click', async (e) => {
   if (t.matches('[data-paywall]')) { e.preventDefault(); openPaywall(t.dataset.paywall); }
   if (t.matches('[data-close]')) t.closest('.modal-bg').classList.remove('open');
   if (t.matches('[data-buy]')) startCheckout('pro', t.dataset.buy);
+  if (t.matches('[data-buy-addon]')) startCheckout('addon', 'monthly');
   if (t.matches('[data-ask]')) send(t.dataset.ask);
   if (t.matches('[data-goto]')) showTab(t.dataset.goto);
   if (t.matches('[data-copy-text]')) copy(t.dataset.copyText, 'Link');
@@ -749,20 +827,40 @@ document.addEventListener('click', async (e) => {
     t.disabled = true;
     t.dataset.accepted = '1';
     t.textContent = 'Writing…';
-    try {
-      await api(`/api/proposals/${t.dataset.accept}/accept`, { method: 'POST' });
-      await send('Yes, write it.');
-      if (t.dataset.accepted) t.textContent = 'Written below';
-    } catch (err) { toast(err.message); t.disabled = false; delete t.dataset.accepted; t.textContent = 'Write 3 versions · 1 credit'; }
+    // One request: the server accepts the proposal and writes it, so a press spends at most one credit.
+    const out = await send('Yes, write it.', { proposalId: t.dataset.accept });
+    if (out === 'written') t.textContent = 'Written below';
+    else if (t.dataset.accepted) { t.disabled = false; delete t.dataset.accepted; t.textContent = 'Write 3 versions · 1 credit'; }
   }
 });
 
 // ---------- paywall + checkout ----------
 
-async function openPaywall(trigger) {
+// Pro users who run out get a top-up offer; the upgrade paywall is only for Free.
+function openTopUp() {
   const q = me.user.quota;
+  $('#pw-title').textContent = `You've used all ${q.limit} credits this month`;
+  $('#pw-sub').textContent = `Plan credits reset on the 1st. Or add ${me.addon.generations} now for $${me.addon.price}; unused ones carry over.`;
+  $('#pw-proof').innerHTML = '';
+  $('#pw-proof').hidden = true;
+  $('#pw-features').hidden = true;
+  $('#pw-note').hidden = true;
+  $('#pw-buy').innerHTML = `<button class="btn primary" data-buy-addon>Buy ${me.addon.generations} credits · $${me.addon.price}</button>`;
+  $('#paywall .pill').textContent = 'Top-up';
+  $('#paywall').classList.add('open');
+  track('paywall_view', { trigger: 'quota', quota_left: q.left, plan: me.user.plan, offer: 'addon' });
+}
+
+async function openPaywall(trigger) {
+  if (me.user.plan === 'pro') { if (trigger === 'quota') openTopUp(); return; }
+  const q = me.user.quota;
+  $('#pw-proof').hidden = false;
+  $('#pw-features').hidden = false;
+  $('#pw-note').hidden = false;
+  $('#paywall .pill').textContent = 'Lumi Pro';
+  $('#pw-buy').innerHTML = `<button class="btn primary" data-buy="monthly">$29 / month</button><button class="btn" data-buy="yearly">$24 / month, billed yearly</button>`;
   const titles = {
-    quota: `You've used all ${q.limit} free posts this month`,
+    quota: q.limit === me.plans.free.generationsPerMonth ? `You've used all ${q.limit} free posts this month` : 'You\'ve used all your credits this month',
     feature: 'See which posts actually sell',
     manual: 'Upgrade to Lumi Pro',
   };
@@ -797,21 +895,28 @@ async function startCheckout(item, cycle) {
       ? `<b>${me.addon.generations} extra credits</b> · ${money(r.checkout.price)}`
       : `<b>Lumi Pro</b> · ${cycle === 'yearly' ? `${money(r.checkout.price)} per year ($24/month)` : `${money(r.checkout.price)} per month`}`;
     $('#checkout').classList.add('open');
-  } catch (err) { toast(err.message); }
+  } catch (err) {
+    toast(err.message);
+    if (err.status === 409) { await refreshMe(); showTab(currentTab); }
+  }
 }
 
 $('#co-pay').addEventListener('click', async () => {
   const btn = $('#co-pay');
   btn.disabled = true;
   try {
-    await api(`/api/billing/simulate-pay/${pendingCheckout.id}`, { method: 'POST' });
+    const r = await api(`/api/billing/simulate-pay/${pendingCheckout.id}`, { method: 'POST' });
     $('#checkout').classList.remove('open');
     await refreshMe();
-    toast(pendingCheckout.item === 'addon' ? 'Credits added' : 'Welcome to Pro');
+    toast(r.refunded ? 'Payment refunded: your plan already covers this' : pendingCheckout.item === 'addon' ? 'Credits added' : 'Welcome to Pro');
     homeData = null;
     wizInfo = null;
     showTab(currentTab);
-  } catch (err) { toast(err.message); } finally { btn.disabled = false; }
+  } catch (err) {
+    toast(err.message);
+    // The checkout can no longer be paid (already Pro, replaced, expired): close it and show the real state.
+    if (err.status === 409) { $('#checkout').classList.remove('open'); pendingCheckout = null; await refreshMe(); showTab(currentTab); }
+  } finally { btn.disabled = false; }
 });
 
 boot().catch((err) => { document.body.innerHTML = `<div class="wrap"><div class="banner">Could not load Lumi: ${esc(err.message)}</div></div>`; });

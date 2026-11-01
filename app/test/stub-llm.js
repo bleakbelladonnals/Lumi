@@ -3,6 +3,16 @@
 // The app itself never routes by keywords; at runtime the real model decides.
 const http = require('http');
 
+// Vendor quirks the stub can imitate, so the adapter in lib/llm.js is tested against each one:
+//  repeatName: the function name is sent again in every chunk
+//  noIndex:    tool-call chunks carry no `index` (and only the first carries the id)
+//  oneChunk:   the whole tool call arrives in a single chunk
+//  thinking:   returns reasoning_content, and answers 400 if an assistant tool-call message comes back without it
+//  fixedTemperature: answers 400 unless temperature is left out or is 1
+//  noToolChoice: answers 400 if tool_choice is sent
+const quirks = {};
+const requests = [];
+
 const VARIANTS = { variants: [
   { label: 'Maker story', hook: 'Fresh from the kiln', caption: 'Fresh from the kiln. {LINK} Code {CODE} gets 10% off.', hashtags: ['#ceramics'] },
   { label: 'Customer voice', hook: 'Warm coffee', caption: 'Coffee still warm at 9am. https://example.com/x {CODE}', hashtags: ['#mug'] },
@@ -16,13 +26,12 @@ function decide(body) {
   // Inner, non-streaming calls from generate_post and revise_post: return JSON.
   if (!body.stream) {
     if (system.includes('You edit social media captions')) return { content: JSON.stringify({ caption: 'Shorter now. {CODE}', hashtags: ['#short'] }) };
-    return { content: JSON.stringify(VARIANTS) };
+    const count = Number.isInteger(quirks.variantCount) ? quirks.variantCount : VARIANTS.variants.length;
+    return { content: JSON.stringify({ variants: VARIANTS.variants.slice(0, count) }) };
   }
   // The agent loop drops tools after a proposal: the model may only write a sentence.
   if (!body.tools) return { content: 'Here is my suggestion. Press the button if it looks right.' };
   if (last.role === 'tool') return { content: 'Done. Behind-the-scenes posts sell best for you.' };
-  const accepted = system.includes('ACCEPTED PROPOSALS') && system.match(/- (prop_[a-f0-9]+):/);
-  if (accepted) return { tool: { name: 'generate_post', arguments: JSON.stringify({ proposal_id: accepted[1] }) } };
   const text = String(last.content || '').toLowerCase();
   const forced = text.match(/force-generate (prop_[a-f0-9]+)/);
   if (forced) return { tool: { name: 'generate_post', arguments: JSON.stringify({ proposal_id: forced[1] }) } };
@@ -42,6 +51,13 @@ function start(port = 0) {
     req.on('end', () => {
       if (!req.url.endsWith('/chat/completions')) { res.writeHead(404).end(); return; }
       const body = JSON.parse(raw || '{}');
+      requests.push(body);
+      const reject = (message) => { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: { message, type: 'invalid_request_error' } })); };
+      if (quirks.fixedTemperature && body.temperature !== undefined && body.temperature !== 1) return reject('invalid temperature: only 1 is allowed for this model');
+      if (quirks.noToolChoice && body.tool_choice !== undefined) return reject('tool_choice is not supported');
+      if (quirks.thinking && (body.messages || []).some((m) => m.role === 'assistant' && m.tool_calls && !m.reasoning_content)) {
+        return reject('thinking is enabled but reasoning_content is missing in assistant tool call message at index 2');
+      }
       const out = decide(body);
       if (!body.stream) {
         const message = out.tool
@@ -53,13 +69,22 @@ function start(port = 0) {
       }
       res.writeHead(200, { 'Content-Type': 'text/event-stream' });
       const send = (delta, finish = null) => res.write(`data: ${JSON.stringify({ id: 'stub', object: 'chat.completion.chunk', choices: [{ index: 0, delta, finish_reason: finish }] })}\n\n`);
+      if (quirks.thinking) send({ role: 'assistant', reasoning_content: 'The merchant asked about results, so ' }), send({ reasoning_content: 'I should look them up.' });
       if (out.tool) {
         const args = out.tool.arguments;
-        send({ role: 'assistant', tool_calls: [{ index: 0, id: 'call_1', type: 'function', function: { name: out.tool.name, arguments: '' } }] });
-        // Split arguments across chunks the way real providers do.
-        const mid = Math.floor(args.length / 2);
-        send({ tool_calls: [{ index: 0, function: { arguments: args.slice(0, mid) } }] });
-        send({ tool_calls: [{ index: 0, function: { arguments: args.slice(mid) } }] });
+        const name = out.tool.name;
+        const id = `call_${Math.random().toString(36).slice(2, 8)}`;
+        const tc = (first, fn) => ({ ...(quirks.noIndex ? {} : { index: 0 }), ...(first ? { id, type: 'function' } : {}), function: fn });
+        if (quirks.oneChunk) {
+          send({ role: 'assistant', tool_calls: [tc(true, { name, arguments: args })] });
+        } else {
+          send({ role: 'assistant', tool_calls: [tc(true, { name, arguments: '' })] });
+          // Split arguments across chunks the way real providers do.
+          const mid = Math.floor(args.length / 2);
+          const extra = quirks.repeatName ? { name } : {};
+          send({ tool_calls: [tc(false, { ...extra, arguments: args.slice(0, mid) })] });
+          send({ tool_calls: [tc(false, { ...extra, arguments: args.slice(mid) })] });
+        }
         send({}, 'tool_calls');
       } else {
         for (const word of out.content.split(/(?<= )/)) send({ content: word });
@@ -71,5 +96,5 @@ function start(port = 0) {
   return new Promise((resolve) => server.listen(port, '127.0.0.1', () => resolve(server)));
 }
 
-module.exports = { start };
+module.exports = { start, quirks, requests };
 if (require.main === module) start(Number(process.env.STUB_PORT) || 4010).then((s) => console.log('stub LLM on', s.address().port));

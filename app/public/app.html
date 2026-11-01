@@ -13,6 +13,7 @@
       <b>Demo controls</b>
       <span class="demo-item">Ad source: <span id="source" class="mono"></span></span>
       <span class="demo-item">Credits: <button class="btn xs" id="leave1">Leave 1</button> <button class="btn xs" id="leave0">Use all</button></span>
+      <span class="demo-item">Billing: <button class="btn xs" id="end-period">End period now</button></span>
       <span class="demo-item">Play the customer: open a tracked link, then order</span>
       <a class="demo-item" href="/admin" target="_blank">Internal metrics ↗</a>
       <a class="demo-item" href="/?utm_source=tiktok&utm_medium=paid&utm_campaign=q4_smb&ttclid=E.C.P.demo123" target="_blank">Landing page with ad parameters ↗</a>
@@ -92,17 +93,17 @@
     <h2 id="pw-title" style="margin-top:12px"></h2>
     <p id="pw-sub" class="muted"></p>
     <div id="pw-proof" class="card tight" style="background:var(--accent-soft); border:0; box-shadow:none"></div>
-    <ul style="padding-left:18px; margin:16px 0">
+    <ul id="pw-features" style="padding-left:18px; margin:16px 0">
       <li>Results for every post, ranked by orders and revenue</li>
       <li>Weekly review: what sold and what to post next</li>
       <li>300 posts a month (top up 200 more for $9)</li>
       <li>Best model, no "Made with Lumi" badge</li>
     </ul>
-    <div class="grid g2">
+    <div class="grid g2" id="pw-buy">
       <button class="btn primary" data-buy="monthly">$29 / month</button>
       <button class="btn" data-buy="yearly">$24 / month, billed yearly</button>
     </div>
-    <p class="small muted" style="margin:10px 0 0">Cancel anytime. Your tracked links keep working on Free.</p>
+    <p id="pw-note" class="small muted" style="margin:10px 0 0">Cancel anytime: you keep Pro until the end of the period you paid for. Your tracked links keep working on Free.</p>
   </div></div>
 
   <!-- Checkout (simulated) -->

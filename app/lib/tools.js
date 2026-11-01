@@ -3,11 +3,14 @@
 // Tools follow what the merchant is trying to do (check results, plan a post, write it, fix it, get a link),
 // not the tables underneath. The catalog is small and goes in the system prompt instead of a tool.
 // Each tool returns { result, card }: result goes back to the model, card is drawn in the chat UI.
+// Spending a credit is not a model tool: generate_post below runs only when the merchant presses the
+// button on a proposal card (server.js -> agent.chat with context.pressed).
 const merchant = require('../data/merchant.json');
 const performance = require('./performance');
 const proposals = require('./proposals');
 const quota = require('./quota');
 const store = require('./store');
+const { PLANS } = require('./config');
 const { generatePost, revisePost, CHANNELS, LINK_IN_TEXT } = require('./generate');
 const { createLink } = require('./links');
 
@@ -65,7 +68,7 @@ const definitions = [
     type: 'function',
     function: {
       name: 'propose_post',
-      description: 'Suggest one post to write: product, channel and angle, with the reason. Costs nothing: the merchant sees a card with a "Write 3 versions" button. Writing costs a credit, so this is always the step before generate_post. After calling it, stop and wait for the merchant to press the button.',
+      description: 'Suggest one post to write: product, channel and angle, with the reason. Costs nothing: the merchant sees a card with a "Write 3 versions · 1 credit" button, and Lumi writes the post when they press it. This is the only way to get a post written. After calling it, stop.',
       parameters: {
         type: 'object',
         properties: {
@@ -75,21 +78,6 @@ const definitions = [
           reason: { type: 'string', description: 'One sentence the merchant will read, citing numbers from get_results_summary when available' },
         },
         required: ['product_id', 'channel', 'angle', 'reason'],
-      },
-    },
-  },
-  {
-    type: 'function',
-    function: {
-      name: 'generate_post',
-      description: 'Write 3 ready-to-publish versions of a proposal the merchant has accepted (pressed the button). Each comes with a tracked link and a discount code. Uses 1 credit. Refused if the proposal has not been accepted.',
-      parameters: {
-        type: 'object',
-        properties: {
-          proposal_id: { type: 'string', description: 'The accepted proposal id, e.g. "prop_..."' },
-          notes: { type: 'string', description: 'Extra instructions from the merchant, e.g. tone or occasion' },
-        },
-        required: ['proposal_id'],
       },
     },
   },
@@ -138,9 +126,15 @@ const postCard = (user, post, extra = {}) => ({
 const handlers = {
   get_results_summary({ days = 30 } = {}, { user }) {
     const s = performance.summary(user, { days });
-    if (s.locked) {
-      const result = { ...s, note: 'Free plan: only the latest post is visible. Do not guess totals or rankings.' };
-      return { result, card: { type: 'summary', ...s } };
+    if (!PLANS[user.plan].weeklyReview || s.locked) {
+      const result = {
+        plan: user.plan,
+        locked: true,
+        period_days: s.period_days,
+        latest_post: s.latest_post,
+        note: 'Free plan: only the latest post is visible. Upgrade to Pro for the full weekly review, totals and rankings.',
+      };
+      return { result, card: { type: 'summary', ...result, total_posts: s.total_posts } };
     }
     // The model gets the rankings trimmed to what it needs to answer; the card shows the headline.
     const pick = (list) => list.map(({ name, posts, orders, revenue, avg_orders_per_post, revenue_per_post, stock }) =>
@@ -162,9 +156,28 @@ const handlers = {
 
   get_post({ post_id } = {}, { user }) {
     const visible = performance.allPosts(user).filter(performance.counts);
-    const post = post_id ? performance.allPosts(user).find((p) => p.id === post_id) : visible[0];
-    if (!post) throw fail('not_found', `No post with id "${post_id}".`);
+    const latest = visible[0];
     const s = performance.summary(user, { days: 90 });
+    if (!latest) throw fail('not_found', 'No posts yet.');
+    if (s.locked && post_id && post_id !== latest?.id) {
+      const result = {
+        id: latest.id,
+        date: latest.date,
+        product: performance.productName(latest.product_id),
+        channel: latest.channel,
+        angle: merchant.angles[latest.angle] || latest.angle,
+        caption: latest.caption,
+        published: !latest.live || latest.published,
+        clicks: latest.clicks,
+        orders: latest.orders,
+        revenue: latest.revenue,
+        locked: true,
+        note: 'Free plan shows results for the latest post only. Upgrade to Pro to inspect older posts and the full weekly review.',
+      };
+      return { result, card: { type: 'post_result', post: result } };
+    }
+    const post = post_id ? performance.allPosts(user).find((p) => p.id === post_id) : latest;
+    if (!post) throw fail('not_found', `No post with id "${post_id}".`);
     const base = {
       id: post.id,
       date: post.date,
@@ -174,10 +187,6 @@ const handlers = {
       caption: post.caption,
       published: !post.live || post.published,
     };
-    if (s.locked && post.id !== visible[0]?.id) {
-      const result = { ...base, locked: true, note: 'Free plan shows results for the latest post only.' };
-      return { result, card: { type: 'post_result', post: result } };
-    }
     const avg = s.locked ? null : s.totals.avg_orders_per_post;
     const waiting = post.live && !post.clicks && !post.orders;
     // For posts written in Lumi we know how each order was matched; the imported history only has totals.
@@ -226,7 +235,7 @@ const handlers = {
         proposal_id: p.id,
         status: 'waiting_for_merchant',
         credits_left: q.left,
-        next: 'The merchant now sees this proposal as a card with a "Write 3 versions · 1 credit" button. End your turn with one or two short sentences in the language the merchant wrote in. Do not call generate_post until they press it.',
+        next: 'The merchant now sees this proposal as a card with a "Write 3 versions · 1 credit" button. End your turn with one or two short sentences in the language the merchant wrote in. Lumi writes the post when they press the button.',
       },
       card: {
         type: 'proposal',
@@ -240,13 +249,15 @@ const handlers = {
     };
   },
 
+  // Not offered to the model. The server runs it when the merchant presses the proposal button.
   async generate_post({ proposal_id, notes } = {}, { user }) {
     const p = proposals.find(user, proposal_id);
     if (!p) throw fail('not_found', `No proposal "${proposal_id}". Call propose_post first.`);
-    if (p.status === 'proposed') {
-      throw fail('needs_confirmation', 'The merchant has not pressed "Write 3 versions" on this proposal yet. Do not call generate_post again; wait for them.');
-    }
     if (p.status === 'used') throw fail('already_written', `This proposal was already written as post ${p.post_id}. Use revise_post to change it.`);
+    if (p.status === 'writing') throw fail('in_progress', 'This post is being written right now.');
+    if (p.status !== 'accepted') {
+      throw fail('needs_confirmation', 'The merchant has not pressed "Write 3 versions" on this proposal. Only the button writes a post.');
+    }
     p.status = 'writing';
     try {
       const { post, quota: q } = await generatePost(user, { product_id: p.product_id, channel: p.channel, angle: p.angle, notes }, { trigger: 'agent' });
@@ -294,9 +305,13 @@ const handlers = {
   },
 };
 
+const OFFERED = new Set(definitions.map((d) => d.function.name));
+
+// ctx.byServer is set only for the proposal button. A model asking for a tool it was not offered
+// (generate_post, say, remembered from an old chat) gets "unknown tool".
 async function run(name, args, ctx) {
   const handler = handlers[name];
-  if (!handler) throw fail('unknown_tool', `Unknown tool "${name}"`);
+  if (!handler || (!OFFERED.has(name) && !ctx.byServer)) throw fail('unknown_tool', `Unknown tool "${name}"`);
   return handler(args, ctx);
 }
 

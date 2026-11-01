@@ -1,6 +1,7 @@
 // A proposal is the assistant's suggestion for one post. Writing it costs a credit, so the assistant
-// can only spend one after the merchant presses the button on the proposal card:
-// proposed -> accepted (button) -> used (generate_post). Anything else is refused on the server.
+// is only spent when the merchant presses the button on the proposal card. The press accepts the proposal
+// and the server writes it in the same request: proposed -> accepted -> writing -> used, or back to
+// proposed if writing failed. The model has no tool that can spend a credit.
 const merchant = require('../data/merchant.json');
 const store = require('./store');
 
@@ -39,12 +40,19 @@ function accept(user, id) {
   return { proposal };
 }
 
-// Accepted and not yet written: the assistant is told about these at the start of its next turn.
-const waiting = (user) => store.db.proposals.filter((p) => p.user_id === user.id && p.status === 'accepted');
+// After a button press: if the post did not get written (no credits, model error), the proposal goes back
+// to waiting for the button. Nothing stays "accepted" between requests, so nothing can spend it later.
+function release(user, id) {
+  const proposal = find(user, id);
+  if (proposal && proposal.status === 'accepted') {
+    proposal.status = 'proposed';
+    store.save();
+  }
+}
 
 function describe(p) {
   const product = merchant.products.find((x) => x.id === p.product_id)?.name || p.product_id;
   return `${p.id}: ${product}, ${p.channel}, ${merchant.angles[p.angle] || p.angle}`;
 }
 
-module.exports = { create, find, accept, waiting, describe };
+module.exports = { create, find, accept, release, describe };

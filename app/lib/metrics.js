@@ -5,9 +5,8 @@ const DAY = 864e5;
 const pct = (a, b) => (b ? Math.round((a / b) * 1000) / 10 : null);
 const sourceOf = (touch) => (touch && touch.utm_source) || (touch && touch.ttclid ? 'tiktok' : null);
 
-function compute() {
+function compute(now = Date.now()) {
   const { db } = store;
-  const now = Date.now();
   const ev = (name) => db.events.filter((e) => e.name === name);
   const users = db.users;
   const pro = users.filter((u) => u.plan === 'pro');
@@ -16,19 +15,39 @@ function compute() {
   const m1Hits = pro.filter((u) => {
     const since = Date.parse(u.pro_since || u.created_at);
     const links = new Set(db.links.filter((l) => l.user_id === u.id && l.post_id).map((l) => l.code));
-    return db.clicks.some((c) => links.has(c.link_code) && c.unique && !c.is_bot && Date.parse(c.ts) - since <= 7 * DAY);
+    return db.clicks.some((c) => {
+      const clickedAt = Date.parse(c.ts);
+      return links.has(c.link_code) && c.unique && !c.is_bot
+        && clickedAt >= since && clickedAt <= since + 7 * DAY && clickedAt <= now;
+    });
   }).length;
 
-  // A4 month 2: new paid users on v2.
+  // A4 month 2: new paid users on v2 in the current UTC calendar month.
   const subsStarted = ev('subscription_started').filter((e) => e.plan === 'pro');
+  const clock = new Date(now);
+  const monthStart = Date.UTC(clock.getUTCFullYear(), clock.getUTCMonth(), 1);
+  const nextMonthStart = Date.UTC(clock.getUTCFullYear(), clock.getUTCMonth() + 1, 1);
+  const month2Starts = subsStarted.filter((e) => {
+    const startedAt = Date.parse(e.ts);
+    return startedAt >= monthStart && startedAt < nextMonthStart && startedAt <= now;
+  });
 
   // A4 month 3: 30-day paid retention of matured cohorts.
   const matured = db.subscriptions.filter((s) => now - Date.parse(s.started_at) >= 30 * DAY);
-  const retained = matured.filter((s) => !s.canceled_at || Date.parse(s.canceled_at) - Date.parse(s.started_at) >= 30 * DAY);
+  const retained = matured.filter((s) => {
+    const endedAt = Date.parse(s.ended_at);
+    if (Number.isFinite(endedAt) && endedAt <= now) return false;
+    const periodEnd = Date.parse(s.current_period_end);
+    return !(s.cancel_at_period_end && Number.isFinite(periodEnd) && periodEnd <= now);
+  });
 
   // Leading indicator and stop signal: weekly results-page open rate among Pro users (stop if < 30%).
   const weekAgo = now - 7 * DAY;
-  const viewers = new Set(ev('report_viewed').filter((e) => Date.parse(e.ts) >= weekAgo && e.plan === 'pro').map((e) => e.user_id));
+  const resultsReports = new Set(['dashboard', 'weekly_review']);
+  const viewers = new Set(ev('report_viewed').filter((e) => {
+    const viewedAt = Date.parse(e.ts);
+    return viewedAt >= weekAgo && viewedAt <= now && e.plan === 'pro' && resultsReports.has(e.report_type);
+  }).map((e) => e.user_id));
 
   // Pricing check (H4): paywall viewers who went on to pay.
   const paywallUsers = new Set(ev('paywall_view').map((e) => e.user_id).filter(Boolean));
@@ -72,10 +91,10 @@ function compute() {
   }
 
   return {
-    generated_at: new Date().toISOString(),
+    generated_at: new Date(now).toISOString(),
     a4: {
       month1: { label: 'Seed Pro users who published a tracked post within 7 days', target_pct: 50, value_pct: pct(m1Hits, pro.length), numerator: m1Hits, denominator: pro.length, note: 'Published = the tracked link received a real (non-bot, unique) click.' },
-      month2: { label: 'New paid users on v2', target: 100, value: subsStarted.length },
+      month2: { label: 'New paid users on v2 this month', target: 100, value: month2Starts.length, window: 'UTC calendar month', window_start: new Date(monthStart).toISOString(), window_end: new Date(nextMonthStart).toISOString() },
       month3: { label: '30-day paid retention (v2 cohort)', target_pct: 45, baseline_pct: 26, value_pct: pct(retained.length, matured.length), matured: matured.length, retained: retained.length, total_subscriptions: db.subscriptions.length },
     },
     leading: {

@@ -7,7 +7,8 @@
     "start": "node server.js",
     "test": "node --test test/app.test.js",
     "eval": "node eval/run.js",
-    "reset": "node -e \"require('fs').rmSync('data/db.json',{force:true});console.log('Demo data cleared')\""
+    "reset": "node -e \"require('fs').rmSync('data/db.json',{force:true});console.log('Demo data cleared')\"",
+    "check-model": "node scripts/check-model.js"
   },
   "license": "MIT",
   "dependencies": {

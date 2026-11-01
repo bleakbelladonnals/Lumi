@@ -73,17 +73,24 @@ function recordClick(link, { ip, ua, referrer }) {
 }
 
 // Discount code wins. Otherwise last click on a tracked link within 30 days.
-// One order is attributed to one post at most.
-function attributeOrder({ discount_code, ref, value, product_id }) {
+// One order is attributed to one post at most. Attribution is only valid when
+// the tracked link promoted the product that was actually purchased.
+function attributeOrder({ order_id, discount_code, ref, value, product_id }) {
   const { db } = store;
+  if (order_id) {
+    const existing = db.orders.find((o) => o.order_id === order_id);
+    if (existing) return { order: existing, replayed: true };
+  }
   let link = null;
   let method = null;
   if (discount_code) {
-    link = db.links.find((l) => l.discount_code && l.discount_code.toUpperCase() === String(discount_code).trim().toUpperCase());
+    link = db.links.find((l) => l.product_id === product_id
+      && l.discount_code
+      && l.discount_code.toUpperCase() === String(discount_code).trim().toUpperCase());
     if (link) method = 'discount_code';
   }
   if (!link && ref) {
-    const candidate = db.links.find((l) => l.code === ref);
+    const candidate = db.links.find((l) => l.code === ref && l.product_id === product_id);
     const lastClick = [...db.clicks].reverse().find((c) => c.link_code === ref && !c.is_bot);
     if (candidate && lastClick && Date.now() - Date.parse(lastClick.ts) < ATTRIBUTION.orderWindowDays * 864e5) {
       link = candidate;
@@ -91,7 +98,7 @@ function attributeOrder({ discount_code, ref, value, product_id }) {
     }
   }
   const order = {
-    order_id: store.id('ord'),
+    order_id: order_id || store.id('ord'),
     value,
     product_id,
     discount_code: discount_code || null,
@@ -114,7 +121,7 @@ function attributeOrder({ discount_code, ref, value, product_id }) {
   } else {
     store.save();
   }
-  return order;
+  return { order, replayed: false };
 }
 
 module.exports = { createLink, recordClick, attributeOrder, baseUrl };

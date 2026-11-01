@@ -8,10 +8,19 @@ const store = require('./store');
 const monthKey = (d = new Date()) => d.toISOString().slice(0, 7); // UTC month
 const dayKey = (d = new Date()) => d.toISOString().slice(0, 10);
 
+// Plan credits reset on the 1st. Top-up credits were paid for, so whatever is left of them carries over
+// (plan credits are used first). They also stay if the user goes back to Free.
 function ensurePeriod(user) {
   const period = monthKey();
-  if (!user.quota || user.quota.period !== period) {
+  if (!user.quota) {
     user.quota = { period, used: 0, reserved: 0, bonus: 0 };
+  } else if (user.quota.period !== period) {
+    const old = user.quota;
+    const bonus = old.bonus || 0;
+    const planLimit = PLANS[user.plan].generationsPerMonth;
+    const leftover = Math.max(0, Math.min(bonus, planLimit + bonus - (old.used || 0)));
+    // A write in flight across midnight keeps its reservation so commit/refund still balance.
+    user.quota = { period, used: 0, reserved: old.reserved || 0, bonus: leftover };
   }
   return user.quota;
 }
@@ -64,6 +73,19 @@ function addTopUp(user) {
   store.save();
 }
 
+// Mid-month plan change. Plan credits already used stay used (capped at the new plan's allowance), and
+// unused top-up credits move across: leaving Pro after 300 posts with a full top-up keeps all 200 top-up credits.
+function onPlanChange(user, fromPlan) {
+  const q = ensurePeriod(user);
+  const fromLimit = PLANS[fromPlan].generationsPerMonth;
+  const bonus = q.bonus || 0;
+  const bonusLeft = Math.max(0, Math.min(bonus, fromLimit + bonus - q.used));
+  const planUsed = Math.min(q.used, fromLimit);
+  q.used = Math.min(planUsed, PLANS[user.plan].generationsPerMonth);
+  q.bonus = bonusLeft;
+  store.save();
+}
+
 // Chat messages have their own daily cap so a free user cannot run up model cost by chatting.
 function takeChatMessage(user) {
   const day = dayKey();
@@ -75,4 +97,4 @@ function takeChatMessage(user) {
   return { ok: true, cap, count: user.chat.count };
 }
 
-module.exports = { status, reserve, commit, refund, addTopUp, takeChatMessage };
+module.exports = { status, reserve, commit, refund, addTopUp, onPlanChange, takeChatMessage };

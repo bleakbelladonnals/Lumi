@@ -8,7 +8,6 @@ const quota = require('./quota');
 const { AGENT, PLANS } = require('./config');
 const { QuotaError } = require('./generate');
 const performance = require('./performance');
-const proposals = require('./proposals');
 
 const conversations = new Map(); // user_id -> messages (in memory; restarts clear it)
 
@@ -30,7 +29,6 @@ function systemPrompt(user, { page, planAtStart } = {}) {
   const plan = PLANS[user.plan];
   const m = merchant.merchant;
   const credits = quota.status(user).left;
-  const waiting = proposals.waiting(user);
   const catalog = merchant.products.map((p) =>
     `- ${p.id} ${p.name}: $${p.price}, ${p.stock} in stock, rated ${p.rating} (${p.review_count} reviews). ${p.selling_points.join('; ')}.`);
   return [
@@ -48,16 +46,12 @@ function systemPrompt(user, { page, planAtStart } = {}) {
     ...catalog,
     'Results snapshot:',
     snapshot(user),
-    ...(waiting.length
-      ? ['', 'ACCEPTED PROPOSALS: the merchant pressed "Write 3 versions" on these. Call generate_post now with the proposal_id, then summarize in one or two sentences.',
-        ...waiting.map((p) => `- ${proposals.describe(p)}`)]
-      : []),
     '',
     '# How to decide',
     '- Questions about results ("how am I doing", "what works", "which post"): call get_results_summary, or get_post for one post.',
     '- Questions about products (price, stock, what it is): answer from the product list above, no tool needed.',
     '- "What do customers say" or before quoting a customer: call find_reviews.',
-    '- Any request to write a post: call propose_post with one product, channel and angle. Pick them from the results (best angle, best channel, best-earning product that is in stock) unless the merchant named them. If results matter for the choice and you have not seen them this chat, call get_results_summary first. Call propose_post in the same turn; never end a writing turn without it, and never say a card is shown unless you called propose_post. Never call generate_post yourself without an accepted proposal: the merchant confirms by pressing the button, not by chatting.',
+    '- Any request to write a post: call propose_post with one product, channel and angle. Pick them from the results (best angle, best channel, best-earning product that is in stock) unless the merchant named them. If results matter for the choice and you have not seen them this chat, call get_results_summary first. Call propose_post in the same turn; never end a writing turn without it, and never say a card is shown unless you called propose_post. You cannot write the post yourself: Lumi writes it when the merchant presses the button on the card, and typing "yes" does not press it.',
     '- Only call propose_post when they ask for a post or what to post next. After answering other questions, name the next step in words.',
     '- Changes to a post already written ("shorter", "warmer", "mention gift wrap"): call revise_post. It is free.',
     '- A link for the bio, a story, an email or an ad: call create_tracked_link.',
@@ -69,6 +63,7 @@ function systemPrompt(user, { page, planAtStart } = {}) {
     '- Plain words, short sentences, no tables, no headings. Under 120 words unless they ask for more.',
     '- The merchant sees every card (results, proposal, post versions), so do not repeat captions or lists that are on a card.',
     '- Reply in the language of the merchant\'s own typed messages, including any short note before a tool call. "Yes, write it." is sent by the proposal button and does not change the language.',
+    '- After the button wrote a post (the message says so), say in one or two sentences which version you would start with and why. The versions are on a card.',
     '',
     '# Grounding',
     '- Every price, stock level, review quote and result number must come from the product list above or a tool result. Never invent discounts, awards, reviews or numbers.',
@@ -108,25 +103,94 @@ const clip = (obj) => {
   return s.length > 12000 ? s.slice(0, 12000) + '…(truncated)' : s;
 };
 
+
+// Runs one tool call, reports it to the browser, and returns what goes back to the model.
+async function runTool(call, user, emit, { byServer = false } = {}) {
+  const args = parseArgs(call.arguments);
+  emit({ type: 'tool_start', id: call.id, name: call.name, args: args.ok ? args.value : call.arguments });
+  const started = Date.now();
+  let payload;
+  let ok = true;
+  let card = null;
+  let error = null;
+  let stopAfter = false;
+  if (!args.ok) {
+    ok = false;
+    error = 'bad_arguments';
+    payload = { error: 'Arguments were not valid JSON. Call the tool again with valid JSON arguments.' };
+  } else {
+    try {
+      const out = await tools.run(call.name, args.value, { user, byServer });
+      payload = out.result;
+      card = out.card;
+      stopAfter = Boolean(out.stopAfter);
+    } catch (err) {
+      ok = false;
+      if (err instanceof QuotaError) {
+        error = 'quota_exceeded';
+        payload = user.plan === 'pro'
+          ? { error: 'quota_exceeded', message: `No credits left this month (${err.status.used}/${err.status.limit}).`, options: 'A top-up adds 200 credits for $9 on the Plan page. Credits reset on the 1st.' }
+          : { error: 'quota_exceeded', message: `No credits left this month (${err.status.used}/${err.status.limit}).`, upgrade: 'Pro: $29/month, 300 credits' };
+        emit({ type: 'paywall', reason: 'quota', quota: quota.status(user) });
+      } else {
+        error = err.code || 'tool_error';
+        payload = { error: err.message };
+      }
+    }
+  }
+  store.track('agent_tool_called', { user_id: user.id, tool: call.name, ok, error, latency_ms: Date.now() - started });
+  emit({ type: 'tool_end', id: call.id, name: call.name, ok, error, result: payload, card });
+  return { payload, ok, stopAfter };
+}
+
 const plansAtStart = new Map(); // user_id -> plan when the chat started
 
+// context.pressed = the proposal whose "Write 3 versions" button was pressed. The server writes that post
+// itself, so one press spends at most one credit whatever the model does, and nothing typed can spend one.
 async function chat(user, text, emit, context = {}) {
   const history = conversations.get(user.id) || [];
   if (!history.length) plansAtStart.set(user.id, user.plan);
   context = { ...context, planAtStart: plansAtStart.get(user.id) };
   const turnStart = history.length;
-  history.push({ role: 'user', content: text });
-
   let stopNext = false;
+  let wrote = null;
+
   try {
+    if (context.pressed) {
+      const call = { id: `btn_${context.pressed}`, name: 'generate_post', arguments: JSON.stringify({ proposal_id: context.pressed }) };
+      const r = await runTool(call, user, emit, { byServer: true });
+      emit({ type: 'quota', quota: quota.status(user) });
+      wrote = r;
+      // Sent as part of the user's message rather than as a tool call, so every vendor accepts it
+      // (thinking models reject a tool call they did not make themselves).
+      history.push({ role: 'user', content: `${text}\n\n[I pressed "Write 3 versions". Lumi's result: ${clip(r.payload)}]` });
+      stopNext = true;
+    } else {
+      history.push({ role: 'user', content: text });
+    }
+
     for (let step = 0; step < AGENT.maxSteps; step += 1) {
-      const { content, toolCalls } = await llm.streamTurn({
-        messages: [{ role: 'system', content: systemPrompt(user, context) }, ...trimmed(history)],
-        // After a proposal the merchant has to press the button, so the model only gets to write a sentence.
-        tools: stopNext ? undefined : tools.definitions,
-        plan: user.plan,
-        onText: (delta) => emit({ type: 'text', delta }),
-      });
+      let turn;
+      try {
+        turn = await llm.streamTurn({
+          messages: [{ role: 'system', content: systemPrompt(user, context) }, ...trimmed(history)],
+          // After a proposal or a button press there is nothing left to do but say a sentence.
+          tools: stopNext ? undefined : tools.definitions,
+          plan: user.plan,
+          onText: (delta) => emit({ type: 'text', delta }),
+        });
+      } catch (err) {
+        // The post is already written and on screen; a failed sentence about it should not look like a failure.
+        if (wrote && step === 0 && err.code !== 'interrupted') {
+          const note = wrote.ok ? 'Here are 3 versions. Pick one to use it, or tell me what to change.' : 'That did not work, and no credit was used. Press the button again to retry.';
+          emit({ type: 'text', delta: note });
+          history.push({ role: 'assistant', content: note });
+          conversations.set(user.id, history);
+          return { steps: 1 };
+        }
+        throw err;
+      }
+      const { content, toolCalls, reasoning } = turn;
 
       if (!toolCalls.length) {
         history.push({ role: 'assistant', content });
@@ -136,43 +200,16 @@ async function chat(user, text, emit, context = {}) {
 
       history.push({
         role: 'assistant',
-        content: content || null,
+        content: content || '',
+        // Thinking models need their reasoning back on the message that made the tool call.
+        ...(reasoning ? { reasoning_content: reasoning } : {}),
         tool_calls: toolCalls.map((c) => ({ id: c.id, type: 'function', function: { name: c.name, arguments: c.arguments || '{}' } })),
       });
 
       for (const call of toolCalls) {
-        const args = parseArgs(call.arguments);
-        emit({ type: 'tool_start', id: call.id, name: call.name, args: args.ok ? args.value : call.arguments });
-        const started = Date.now();
-        let payload;
-        let ok = true;
-        let card = null;
-        let error = null;
-        if (!args.ok) {
-          ok = false;
-          error = 'bad_arguments';
-          payload = { error: 'Arguments were not valid JSON. Call the tool again with valid JSON arguments.' };
-        } else {
-          try {
-            const out = await tools.run(call.name, args.value, { user });
-            payload = out.result;
-            card = out.card;
-            if (out.stopAfter) stopNext = true;
-          } catch (err) {
-            ok = false;
-            if (err instanceof QuotaError) {
-              error = 'quota_exceeded';
-              payload = { error: 'quota_exceeded', message: `No credits left this month (${err.status.used}/${err.status.limit}).`, upgrade: 'Pro: $29/month, 300 credits' };
-              emit({ type: 'paywall', reason: 'quota', quota: quota.status(user) });
-            } else {
-              error = err.code || 'tool_error';
-              payload = { error: err.message };
-            }
-          }
-        }
-        store.track('agent_tool_called', { user_id: user.id, tool: call.name, ok, error, latency_ms: Date.now() - started });
-        emit({ type: 'tool_end', id: call.id, name: call.name, ok, error, result: payload, card });
-        history.push({ role: 'tool', tool_call_id: call.id, content: clip(payload) });
+        const r = await runTool(call, user, emit);
+        if (r.stopAfter) stopNext = true;
+        history.push({ role: 'tool', tool_call_id: call.id, content: clip(r.payload) });
       }
       emit({ type: 'quota', quota: quota.status(user) });
     }

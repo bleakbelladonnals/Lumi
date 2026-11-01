@@ -85,7 +85,9 @@
     }
 
     async function load() {
-      const m = await api('/api/admin/metrics');
+      const tok = new URLSearchParams(location.search).get('token');
+      const q = tok ? `token=${encodeURIComponent(tok)}` : '';
+      const m = await api(`/api/admin/metrics${q ? '?' + q : ''}`);
       const a = m.a4;
       $('#a4').innerHTML = [
         metricCard('Month 1 · ' + a.month1.label, pctText(a.month1.value_pct), `Target ≥ ${a.month1.target_pct}% · ${a.month1.numerator}/${a.month1.denominator} Pro users · ${a.month1.note}`, status(a.month1.value_pct, a.month1.target_pct)),
@@ -114,7 +116,7 @@
         ? m.outbox.map((o) => `<pre class="mono small" style="background:#fbfaf8; border:1px solid var(--line); border-radius:8px; padding:10px; white-space:pre-wrap">${esc(JSON.stringify(o.payload, null, 2))}</pre>`).join('')
         : '<p class="muted small">Nothing yet. Sign up from a TikTok-tagged landing URL, then upgrade to Pro.</p>';
 
-      const ev = await api('/api/admin/events?limit=200');
+      const ev = await api(`/api/admin/events?limit=200${q ? '&' + q : ''}`);
       const names = [...new Set(ev.events.map((e) => e.name))].sort();
       const f = $('#filter');
       const cur = f.value;

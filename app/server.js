@@ -11,10 +11,21 @@ const llm = require('./lib/llm');
 const performance = require('./lib/performance');
 const metrics = require('./lib/metrics');
 const proposals = require('./lib/proposals');
+const billing = require('./lib/billing');
 const merchant = require('./data/merchant.json');
 const { generatePost, QuotaError } = require('./lib/generate');
 const { recordClick, attributeOrder } = require('./lib/links');
 const { PLANS, ADDON } = require('./lib/config');
+
+// Demo helpers (use up credits, end a billing period, the simulated payment page) are on for local runs
+// and off when NODE_ENV=production unless DEMO_TOOLS says otherwise. They must never reach real users:
+// "use up credits" can also refill them, and the simulated payment page grants Pro without a charge.
+const PRODUCTION = process.env.NODE_ENV === 'production';
+const DEMO = process.env.DEMO_TOOLS ? process.env.DEMO_TOOLS !== 'off' : !PRODUCTION;
+if (PRODUCTION && !process.env.BILLING_WEBHOOK_SECRET) {
+  console.error('BILLING_WEBHOOK_SECRET is required when NODE_ENV=production.');
+  process.exit(1);
+}
 
 const app = express();
 app.set('trust proxy', true);
@@ -26,7 +37,12 @@ app.use(express.static(path.join(__dirname, 'public'), { extensions: ['html'] })
 // ---------- helpers ----------
 
 const cookies = (req) => Object.fromEntries((req.headers.cookie || '').split(';').map((c) => c.trim().split('=').map(decodeURIComponent)).filter((p) => p[0]));
-const currentUser = (req) => store.db.users.find((u) => u.id === cookies(req).lumi_uid);
+// Every request sees the plan as of now: a canceled Pro period that ran out turns into Free here.
+const currentUser = (req) => {
+  const user = store.db.users.find((u) => u.id === cookies(req).lumi_uid);
+  if (user) billing.sync(user);
+  return user;
+};
 const TOUCH_KEYS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term', 'ttclid', 'referrer', 'landing_path', 'ts'];
 const cleanTouch = (t) => (t && typeof t === 'object'
   ? Object.fromEntries(TOUCH_KEYS.filter((k) => t[k]).map((k) => [k, String(t[k]).slice(0, 200)]))
@@ -48,7 +64,7 @@ function publicUser(user) {
     plan_info: PLANS[user.plan],
     quota: quota.status(user),
     first_touch: user.first_touch,
-    subscription: store.db.subscriptions.find((s) => s.user_id === user.id && !s.ended_at) || null,
+    subscription: billing.describe(user),
   };
 }
 
@@ -119,7 +135,7 @@ app.get('/api/me', (req, res) => {
     llm: { configured: llm.configured(), model: process.env.LLM_MODEL || null },
     plans: PLANS,
     addon: ADDON,
-    demo_tools: process.env.DEMO_TOOLS !== 'off',
+    demo_tools: DEMO,
   });
 });
 
@@ -129,22 +145,41 @@ app.get('/api/catalog', (req, res) => {
 
 // ---------- AI ----------
 
+// One answer at a time per user: a second tab or a double press must not run two turns (and two writes) at once.
+const busyChats = new Set();
+
 app.post('/api/chat', requireUser, async (req, res) => {
   const text = String(req.body?.message || '').trim().slice(0, 2000);
+  const pressedId = req.body?.proposal_id ? String(req.body.proposal_id) : null;
   if (!text) return res.status(400).json({ error: 'empty_message' });
   if (!llm.configured()) return res.status(503).json({ error: 'llm_not_configured', message: 'Add LLM_API_KEY, LLM_BASE_URL and LLM_MODEL to app/.env, then restart.' });
-  const allowed = quota.takeChatMessage(req.user);
-  if (!allowed.ok) return res.status(429).json({ error: 'chat_limit', message: `Daily chat limit reached (${allowed.cap} messages on ${PLANS[req.user.plan].name}).` });
+  if (busyChats.has(req.user.id)) return res.status(409).json({ error: 'busy', message: 'Lumi is still answering your last message.' });
 
+  // The proposal button. Pressing it is the go-ahead to spend one credit on that proposal, so it is
+  // accepted here and written by the server in the same request; it does not count as a chat message.
+  if (pressedId) {
+    const out = proposals.accept(req.user, pressedId);
+    if (out.error) return res.status(404).json({ error: out.error, message: 'That proposal is no longer available.' });
+    if (out.proposal.status === 'used') return res.status(409).json({ error: 'already_written', message: 'This proposal is already written.', post_id: out.proposal.post_id });
+  } else {
+    const allowed = quota.takeChatMessage(req.user);
+    if (!allowed.ok) return res.status(429).json({ error: 'chat_limit', message: `Daily chat limit reached (${allowed.cap} messages on ${PLANS[req.user.plan].name}).` });
+  }
+
+  busyChats.add(req.user.id);
   res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive' });
   const emit = (data) => res.write(`data: ${JSON.stringify(data)}\n\n`);
   try {
     const page = ['home', 'write', 'results', 'plan'].includes(req.body?.page) ? req.body.page : null;
-    await agent.chat(req.user, text, emit, { page });
+    await agent.chat(req.user, text, emit, { page, pressed: pressedId });
     emit({ type: 'done', quota: quota.status(req.user) });
   } catch (err) {
     console.error('[chat]', err.code || '', err.cause?.message || err.message);
     emit({ type: 'error', code: err.code || 'error', message: err.message || 'Something went wrong.' });
+  } finally {
+    busyChats.delete(req.user.id);
+    // A press that did not end in a written post leaves the button usable again.
+    if (pressedId) proposals.release(req.user, pressedId);
   }
   res.end();
 });
@@ -154,23 +189,37 @@ app.post('/api/chat/reset', requireUser, (req, res) => {
   res.json({ ok: true });
 });
 
+// The Write page. request_id makes a retry or a double click return the same post instead of writing
+// (and charging for) a second one.
 app.post('/api/generate', requireUser, async (req, res) => {
   if (!llm.configured()) return res.status(503).json({ error: 'llm_not_configured', message: 'Add LLM_API_KEY, LLM_BASE_URL and LLM_MODEL to app/.env, then restart.' });
+  const user = req.user;
+  const key = req.body?.request_id ? String(req.body.request_id).slice(0, 64) : null;
+  const seen = (user.generate_requests ||= {});
+  if (key && seen[key]) {
+    if (seen[key].post_id) {
+      const post = store.db.posts.find((p) => p.id === seen[key].post_id);
+      return res.json({ post: { ...post, product: performance.productName(post.product_id) }, quota: quota.status(user), replayed: true });
+    }
+    return res.status(409).json({ error: 'in_progress', message: 'This post is still being written.' });
+  }
+  if (key) seen[key] = { at: new Date().toISOString() };
   try {
-    const { post, quota: q } = await generatePost(req.user, req.body || {}, { trigger: 'create_page' });
+    const { post, quota: q } = await generatePost(user, req.body || {}, { trigger: 'create_page' });
+    if (key) {
+      seen[key].post_id = post.id;
+      // Keep the last 50 keys; that covers any realistic retry window.
+      const keys = Object.keys(seen);
+      for (const k of keys.slice(0, Math.max(0, keys.length - 50))) delete seen[k];
+      store.save();
+    }
     res.json({ post: { ...post, product: performance.productName(post.product_id) }, quota: q });
   } catch (err) {
+    if (key) delete seen[key];
     if (err instanceof QuotaError) return res.status(402).json({ error: 'quota_exceeded', quota: err.status });
     const status = err.code === 'bad_input' ? 400 : 502;
     res.status(status).json({ error: err.code || 'error', message: err.message });
   }
-});
-
-// The button on a proposal card. This, not anything typed in chat, is what lets the assistant spend a credit.
-app.post('/api/proposals/:id/accept', requireUser, (req, res) => {
-  const out = proposals.accept(req.user, req.params.id);
-  if (out.error) return res.status(404).json({ error: out.error });
-  res.json({ proposal: out.proposal, quota: quota.status(req.user) });
 });
 
 app.get('/api/posts/:id', requireUser, (req, res) => {
@@ -254,35 +303,51 @@ app.post('/api/shop/order', (req, res) => {
   const { product_id, quantity = 1, discount_code } = req.body || {};
   const product = merchant.products.find((p) => p.id === product_id);
   if (!product) return res.status(400).json({ error: 'bad_product' });
+  const suppliedOrderId = String(req.body?.order_id || '').trim();
+  if (suppliedOrderId && !/^[a-zA-Z0-9_-]{8,80}$/.test(suppliedOrderId)) {
+    return res.status(400).json({ error: 'bad_order_id' });
+  }
   const qty = Math.min(Math.max(Number(quantity) || 1, 1), 10);
   const ref = req.body?.ref || cookies(req).lumi_ref || null;
-  const codeOk = discount_code && store.db.links.some((l) => l.discount_code?.toUpperCase() === String(discount_code).trim().toUpperCase());
+  const codeOk = discount_code && store.db.links.some((l) => l.product_id === product_id
+    && l.discount_code?.toUpperCase() === String(discount_code).trim().toUpperCase());
   const value = Math.round(product.price * qty * (codeOk ? 0.9 : 1) * 100) / 100;
-  const order = attributeOrder({ discount_code: codeOk ? discount_code : null, ref, value, product_id });
-  res.json({ order, discount_applied: Boolean(codeOk) });
+  const { order, replayed } = attributeOrder({
+    order_id: suppliedOrderId || null,
+    discount_code: codeOk ? discount_code : null,
+    ref,
+    value,
+    product_id,
+  });
+  res.json({ order, discount_applied: Boolean(order.discount_code), replayed });
 });
 
 // ---------- billing (simulated provider; plan changes only on the webhook) ----------
 
 const WEBHOOK_SECRET = process.env.BILLING_WEBHOOK_SECRET || 'demo-webhook-secret';
 const sign = (body) => crypto.createHmac('sha256', WEBHOOK_SECRET).update(body).digest('hex');
+const signatureOk = (body, given) => {
+  const want = Buffer.from(sign(body));
+  const got = Buffer.from(String(given || ''));
+  return got.length === want.length && crypto.timingSafeEqual(got, want);
+};
+
+const send = (res, out) => res.status(out.status).json(out.body);
 
 app.post('/api/billing/checkout', requireUser, (req, res) => {
   const item = req.body?.item === 'addon' ? 'addon' : 'pro';
   const cycle = req.body?.cycle === 'yearly' ? 'yearly' : 'monthly';
-  if (item === 'pro' && req.user.plan === 'pro') return res.status(400).json({ error: 'already_pro' });
-  if (item === 'addon' && req.user.plan !== 'pro') return res.status(400).json({ error: 'pro_only', message: 'Top-ups are for Pro users.' });
-  const price = item === 'addon' ? ADDON.price : cycle === 'yearly' ? PLANS.pro.priceYearlyPerMonth * 12 : PLANS.pro.price;
-  const checkout = { id: store.id('chk'), user_id: req.user.id, item, cycle, price, status: 'open', created_at: new Date().toISOString() };
-  store.db.checkouts.push(checkout);
-  store.save();
-  res.json({ checkout });
+  send(res, billing.createCheckout(req.user, { item, cycle }));
 });
 
-// Stands in for the payment provider's hosted page: it "pays" and then calls our webhook, signed.
+// Stands in for the payment provider's hosted page: it checks the checkout can still be paid, "pays",
+// then calls our webhook, signed. A closed checkout or a user already on Pro is never charged.
 app.post('/api/billing/simulate-pay/:id', requireUser, async (req, res) => {
+  if (!DEMO) return res.status(404).json({ error: 'not_available', message: 'Payments go through the real provider here.' });
   const checkout = store.db.checkouts.find((c) => c.id === req.params.id && c.user_id === req.user.id);
   if (!checkout) return res.status(404).json({ error: 'not_found' });
+  const blocked = billing.canPay(req.user, checkout);
+  if (blocked) return res.status(blocked.status).json({ ...blocked.body, user: publicUser(req.user) });
   const body = JSON.stringify({ type: 'checkout.completed', checkout_id: checkout.id, paid_at: new Date().toISOString() });
   const port = req.socket.localPort;
   const r = await fetch(`http://127.0.0.1:${port}/api/billing/webhook`, {
@@ -296,69 +361,36 @@ app.post('/api/billing/simulate-pay/:id', requireUser, async (req, res) => {
 
 app.post('/api/billing/webhook', express.text({ type: '*/*' }), (req, res) => {
   const raw = typeof req.body === 'string' ? req.body : '';
-  if (req.get('X-Signature') !== sign(raw)) return res.status(400).json({ error: 'bad_signature' });
+  if (!signatureOk(raw, req.get('X-Signature'))) return res.status(400).json({ error: 'bad_signature' });
   let evt;
   try { evt = JSON.parse(raw); } catch { return res.status(400).json({ error: 'bad_json' }); }
-  const checkout = store.db.checkouts.find((c) => c.id === evt.checkout_id);
-  if (!checkout) return res.status(404).json({ error: 'unknown_checkout' });
-  if (checkout.status === 'paid') return res.json({ ok: true, duplicate: true }); // webhooks can repeat
-  checkout.status = 'paid';
-  const user = store.db.users.find((u) => u.id === checkout.user_id);
-
-  if (checkout.item === 'addon') {
-    quota.addTopUp(user);
-    store.track('addon_purchased', { user_id: user.id, price: checkout.price, credits: ADDON.generations });
-    return res.json({ ok: true });
-  }
-
-  user.plan = 'pro';
-  user.pro_since = new Date().toISOString();
-  const sub = { id: store.id('sub'), user_id: user.id, plan: 'pro', cycle: checkout.cycle, price: checkout.price, started_at: user.pro_since, canceled_at: null };
-  store.db.subscriptions.push(sub);
-  const ft = user.first_touch || {};
-  const event = store.track('subscription_started', {
-    user_id: user.id,
-    plan: 'pro',
-    cycle: checkout.cycle,
-    price: checkout.price,
-    platform: user.platform || 'web',
-    utm_source: ft.utm_source || null,
-    utm_medium: ft.utm_medium || null,
-    utm_campaign: ft.utm_campaign || null,
-    ttclid: ft.ttclid || null,
-    days_since_signup: Math.floor((Date.now() - Date.parse(user.created_at)) / 864e5),
-  });
-  // Server-side conversion postback (A13). Same event_id as the browser pixel so the platform de-duplicates.
-  if (ft.ttclid || ft.utm_source === 'tiktok') {
-    store.db.outbox.push({
-      destination: 'TikTok Events API (simulated, not sent)',
-      payload: {
-        event: 'Subscribe',
-        event_id: event.event_id,
-        event_time: Math.floor(Date.now() / 1000),
-        user: { email: sha256(user.email), ttclid: ft.ttclid || null },
-        properties: { value: checkout.price, currency: 'USD', content_type: 'subscription' },
-      },
-      created_at: new Date().toISOString(),
-    });
-    store.save();
-  }
-  res.json({ ok: true, event_id: event.event_id });
+  if (evt.type !== 'checkout.completed') return res.json({ ok: true, ignored: evt.type });
+  send(res, billing.onPaid(evt.checkout_id, { sha256 }));
 });
 
+// Cancel keeps Pro until the paid period ends; "Keep Pro" undoes it until then.
 app.post('/api/billing/cancel', requireUser, (req, res) => {
-  const sub = store.db.subscriptions.find((s) => s.user_id === req.user.id && !s.canceled_at);
-  if (!sub) return res.status(400).json({ error: 'no_subscription' });
-  sub.canceled_at = new Date().toISOString(); // stays Pro until the period ends (demo: immediate downgrade)
-  req.user.plan = 'free';
-  store.track('subscription_canceled', { user_id: req.user.id, days_active: Math.floor((Date.now() - Date.parse(sub.started_at)) / 864e5) });
-  res.json({ user: publicUser(req.user) });
+  const out = billing.cancel(req.user);
+  res.status(out.status).json({ ...out.body, user: publicUser(req.user) });
+});
+
+app.post('/api/billing/resume', requireUser, (req, res) => {
+  const out = billing.resume(req.user);
+  res.status(out.status).json({ ...out.body, user: publicUser(req.user) });
 });
 
 // ---------- internal dashboard ----------
 
-app.get('/api/admin/metrics', (req, res) => res.json(metrics.compute()));
-app.get('/api/admin/events', (req, res) => {
+// Internal pages. Open in the local demo; with ADMIN_TOKEN set they need ?token= (or an X-Admin-Token
+// header), and in production they stay closed until a token is set.
+function requireAdmin(req, res, next) {
+  const token = process.env.ADMIN_TOKEN;
+  if (!token && PRODUCTION) return res.status(401).json({ error: 'admin_only', message: 'Set ADMIN_TOKEN to open the metrics page.' });
+  if (token && req.query.token !== token && req.get('X-Admin-Token') !== token) return res.status(401).json({ error: 'admin_only' });
+  next();
+}
+app.get('/api/admin/metrics', requireAdmin, (req, res) => res.json(metrics.compute()));
+app.get('/api/admin/events', requireAdmin, (req, res) => {
   const limit = Math.min(Number(req.query.limit) || 100, 500);
   res.json({ events: store.db.events.slice(-limit).reverse() });
 });
@@ -366,12 +398,22 @@ app.get('/api/admin/events', (req, res) => {
 // Demo helper so reviewers can reach the paywall without generating 10 times.
 // It only moves the counter; the limit is still enforced by the same server code.
 app.post('/api/demo/use-credits', requireUser, (req, res) => {
-  if (process.env.DEMO_TOOLS === 'off') return res.status(404).end();
+  if (!DEMO) return res.status(404).end();
   const st = quota.status(req.user);
   const leave = Math.max(0, Math.min(Number(req.body?.leave ?? 1), st.limit));
   req.user.quota.used = st.limit - leave;
   store.save();
   res.json({ quota: quota.status(req.user) });
+});
+
+// Demo helper: jump to the end of the paid period, so a canceled Pro turns Free (or an active one renews).
+app.post('/api/demo/end-period', requireUser, (req, res) => {
+  if (!DEMO) return res.status(404).end();
+  const sub = billing.activeSub(req.user);
+  if (!sub) return res.status(409).json({ error: 'no_subscription' });
+  sub.current_period_end = new Date(Date.now() - 1000).toISOString();
+  billing.sync(req.user);
+  res.json({ user: publicUser(req.user) });
 });
 
 app.use((err, req, res, next) => {

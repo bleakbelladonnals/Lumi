@@ -25,7 +25,7 @@
             <div><label>Quantity</label><input id="qty" type="number" min="1" max="10" value="1"></div>
             <div><label>Discount code</label><input id="code" placeholder="e.g. JC-AB12"></div>
           </div>
-          <button id="buy" class="btn primary" style="margin-top:12px; width:100%">Place order (simulated)</button>
+          <button id="buy" class="btn primary" style="margin-top:12px; width:100%" disabled>Place order (simulated)</button>
           <p id="out" class="small" style="margin-top:10px"></p>
         </div>
       </div>
@@ -37,7 +37,9 @@
   <script>
     const q = new URLSearchParams(location.search);
     const ref = q.get('ref');
+    const buy = document.getElementById('buy');
     let product;
+    let pendingOrderId = null;
     (async () => {
       const data = await Lumi.api(`/api/shop/link/${encodeURIComponent(ref || 'none')}?product=${encodeURIComponent(q.get('product') || '')}`);
       product = data.product;
@@ -45,6 +47,7 @@
       document.getElementById('img').textContent = product.name.split(' ')[0];
       document.getElementById('price').textContent = Lumi.money(product.price);
       document.getElementById('points').innerHTML = product.selling_points.map((p) => `<li>${Lumi.esc(p)}</li>`).join('');
+      buy.disabled = false;
       if (data.badge) document.getElementById('badge').style.display = 'block';
       if (ref) {
         const el = document.getElementById('ref');
@@ -52,15 +55,23 @@
         el.innerHTML = `You arrived through a Lumi tracked link <b class="mono">${Lumi.esc(ref)}</b>${data.channel ? ` from ${Lumi.esc(Lumi.titleCase(data.channel))}` : ''}. The click was counted by the redirect.`;
       }
     })();
-    document.getElementById('buy').addEventListener('click', async () => {
+    buy.addEventListener('click', async () => {
       const out = document.getElementById('out');
+      pendingOrderId ||= `web_${crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}_${Math.random().toString(36).slice(2)}`}`;
+      buy.disabled = true;
+      buy.textContent = 'Placing order…';
       try {
-        const r = await Lumi.api('/api/shop/order', { method: 'POST', body: { product_id: product.id, quantity: document.getElementById('qty').value, discount_code: document.getElementById('code').value.trim() || undefined, ref } });
+        const r = await Lumi.api('/api/shop/order', { method: 'POST', body: { order_id: pendingOrderId, product_id: product.id, quantity: document.getElementById('qty').value, discount_code: document.getElementById('code').value.trim() || undefined, ref } });
         const o = r.order;
         out.innerHTML = o.attribution_method
           ? `<span class="pill good">Order ${Lumi.money(o.value)} attributed by ${o.attribution_method.replace('_', ' ')}</span> to post <span class="mono">${Lumi.esc(o.post_id || '(link without post)')}</span>${r.discount_applied ? ' · 10% off applied' : ''}`
           : `<span class="pill">Order ${Lumi.money(o.value)} placed, not attributed</span> (no valid code and no recent tracked click)`;
+        pendingOrderId = null;
       } catch (err) { out.textContent = err.message; }
+      finally {
+        buy.disabled = false;
+        buy.textContent = 'Place order (simulated)';
+      }
     });
   </script>
 </body>
