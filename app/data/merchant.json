@@ -1,0 +1,63 @@
+{
+  "as_of": "2026-10-30",
+  "merchant": {
+    "name": "Juniper & Clay",
+    "owner": "Maya",
+    "category": "Handmade ceramics and home goods",
+    "location": "Portland, Oregon, US",
+    "store": "Shopify",
+    "channels": ["instagram", "tiktok"],
+    "monthly_revenue_usd": 12000,
+    "brand_voice": "Warm, honest, a little playful. Talks like a maker, not a brand."
+  },
+  "products": [
+    { "id": "p1", "name": "Speckled Morning Mug", "price": 34, "stock": 120, "rating": 4.8, "review_count": 212, "selling_points": ["Keeps coffee hot longer (thick stoneware walls)", "Dishwasher and microwave safe", "Every glaze pattern is one of a kind"] },
+    { "id": "p2", "name": "Ocean Glaze Bowl Set (2)", "price": 58, "stock": 45, "rating": 4.7, "review_count": 96, "selling_points": ["Deep blue glaze that pools like seawater", "Right size for ramen or salads", "Stackable"] },
+    { "id": "p3", "name": "Mini Bud Vase", "price": 22, "stock": 200, "rating": 4.9, "review_count": 341, "selling_points": ["Fits one or two stems", "Easy gift under $25", "Comes in 5 glaze colors"] },
+    { "id": "p4", "name": "Pour-Over Coffee Set", "price": 89, "stock": 18, "rating": 4.6, "review_count": 54, "selling_points": ["Dripper, carafe and two cups", "Slow, even extraction", "Small batch, only 18 left"] },
+    { "id": "p5", "name": "Matte Planter (Medium)", "price": 46, "stock": 60, "rating": 4.5, "review_count": 77, "selling_points": ["Drainage hole and saucer included", "Unglazed matte finish", "Fits a 6 inch pot"] },
+    { "id": "p6", "name": "Holiday Gift Box (Mug + Candle)", "price": 64, "stock": 80, "rating": 4.8, "review_count": 38, "selling_points": ["Speckled mug plus a cedar candle poured into a ceramic cup", "Ships gift-wrapped with a handwritten note", "New for the 2026 holidays"] }
+  ],
+  "reviews": [
+    { "id": "r1", "product_id": "p1", "rating": 5, "date": "2026-10-20", "text": "My coffee actually stays warm through my first meeting. And mine has a little swirl no one else has." },
+    { "id": "r2", "product_id": "p1", "rating": 5, "date": "2026-10-11", "text": "Bought one, came back for three more as gifts. Heavy in the best way." },
+    { "id": "r3", "product_id": "p1", "rating": 4, "date": "2026-09-28", "text": "Love it, but it is bigger than I expected. Holds a lot of coffee, which I guess is a plus." },
+    { "id": "r4", "product_id": "p1", "rating": 5, "date": "2026-09-15", "text": "Survived a year of daily dishwasher runs. Glaze still perfect." },
+    { "id": "r5", "product_id": "p2", "rating": 5, "date": "2026-10-18", "text": "The blue is even prettier in person. Perfect ramen bowls." },
+    { "id": "r6", "product_id": "p2", "rating": 4, "date": "2026-10-02", "text": "Gorgeous color. One bowl had a tiny glaze drip on the base, did not bother me." },
+    { "id": "r7", "product_id": "p2", "rating": 5, "date": "2026-09-21", "text": "We use them every night. They stack neatly in our tiny kitchen." },
+    { "id": "r8", "product_id": "p3", "rating": 5, "date": "2026-10-25", "text": "Bought five in different colors for my bridesmaids. Everyone cried a little." },
+    { "id": "r9", "product_id": "p3", "rating": 5, "date": "2026-10-09", "text": "Cute, tiny, perfect for one rose on my desk." },
+    { "id": "r10", "product_id": "p3", "rating": 5, "date": "2026-09-30", "text": "Best gift under $25 I have found. Packaging was lovely." },
+    { "id": "r11", "product_id": "p3", "rating": 4, "date": "2026-09-12", "text": "Smaller than I pictured, but really well made." },
+    { "id": "r12", "product_id": "p4", "rating": 5, "date": "2026-10-16", "text": "Makes my weekend coffee feel like a ritual. Even extraction, no bitterness." },
+    { "id": "r13", "product_id": "p4", "rating": 4, "date": "2026-09-25", "text": "Beautiful set. Shipping took 9 days, worth the wait." },
+    { "id": "r14", "product_id": "p5", "rating": 5, "date": "2026-10-13", "text": "My pothos looks so happy. Love that the saucer is included." },
+    { "id": "r15", "product_id": "p5", "rating": 3, "date": "2026-09-19", "text": "Nice planter but the matte finish shows water marks." },
+    { "id": "r16", "product_id": "p6", "rating": 5, "date": "2026-10-26", "text": "Ordered as a thank-you gift. The handwritten note made it so personal." },
+    { "id": "r17", "product_id": "p6", "rating": 5, "date": "2026-10-21", "text": "The candle smells like a cabin in the woods, and the cup becomes a mini planter after." },
+    { "id": "r18", "product_id": "p6", "rating": 4, "date": "2026-10-19", "text": "Lovely box. Wish there were more scent options." }
+  ],
+  "posts": [
+    { "id": "h1", "date": "2026-09-08", "channel": "instagram", "product_id": "p1", "angle": "product_feature", "caption": "Thick walls, hot coffee, zero two-handed reheats. Meet the Speckled Morning Mug.", "impressions": 2100, "clicks": 38, "orders": 1, "revenue": 34 },
+    { "id": "h2", "date": "2026-09-12", "channel": "tiktok", "product_id": "p3", "angle": "behind_the_scenes", "caption": "Throwing 40 tiny vases before lunch. Watch the last one collapse.", "impressions": 9800, "clicks": 210, "orders": 7, "revenue": 154 },
+    { "id": "h3", "date": "2026-09-17", "channel": "instagram", "product_id": "p2", "angle": "discount_offer", "caption": "15% off Ocean bowls this weekend only. Code OCEAN15.", "impressions": 2600, "clicks": 95, "orders": 2, "revenue": 104 },
+    { "id": "h4", "date": "2026-09-22", "channel": "instagram", "product_id": "p1", "angle": "customer_story", "caption": "Dana has used the same mug every morning for a year. Here is what it looks like now.", "impressions": 2400, "clicks": 72, "orders": 4, "revenue": 136 },
+    { "id": "h5", "date": "2026-09-26", "channel": "tiktok", "product_id": "p4", "angle": "product_feature", "caption": "Why a ceramic dripper changes your pour-over.", "impressions": 5200, "clicks": 88, "orders": 1, "revenue": 89 },
+    { "id": "h6", "date": "2026-10-01", "channel": "tiktok", "product_id": "p1", "angle": "behind_the_scenes", "caption": "No two glazes are the same. Here is why (kiln opening, 60 seconds).", "impressions": 12400, "clicks": 260, "orders": 9, "revenue": 306 },
+    { "id": "h7", "date": "2026-10-05", "channel": "instagram", "product_id": "p5", "angle": "discount_offer", "caption": "Planter sale. 20% off with PLANT20.", "impressions": 2300, "clicks": 81, "orders": 1, "revenue": 46 },
+    { "id": "h8", "date": "2026-10-09", "channel": "instagram", "product_id": "p3", "angle": "ugc_review", "caption": "\"Bought five for my bridesmaids. Everyone cried a little.\" Thank you, Priya.", "impressions": 2700, "clicks": 66, "orders": 3, "revenue": 66 },
+    { "id": "h9", "date": "2026-10-14", "channel": "tiktok", "product_id": "p2", "angle": "behind_the_scenes", "caption": "Dipping bowls in our ocean glaze. It goes on grey and comes out blue.", "impressions": 10100, "clicks": 198, "orders": 6, "revenue": 348 },
+    { "id": "h10", "date": "2026-10-18", "channel": "instagram", "product_id": "p6", "angle": "gift_idea", "caption": "The gift box for the person who says they want nothing.", "impressions": 3100, "clicks": 92, "orders": 5, "revenue": 320 },
+    { "id": "h11", "date": "2026-10-22", "channel": "instagram", "product_id": "p1", "angle": "customer_story", "caption": "A teacher, 7am, and the mug that keeps her coffee warm through first period.", "impressions": 2500, "clicks": 70, "orders": 3, "revenue": 102 },
+    { "id": "h12", "date": "2026-10-27", "channel": "tiktok", "product_id": "p6", "angle": "gift_idea", "caption": "Packing 30 holiday boxes and writing every note by hand.", "impressions": 8600, "clicks": 150, "orders": 4, "revenue": 256 }
+  ],
+  "angles": {
+    "behind_the_scenes": "Behind the scenes",
+    "customer_story": "Customer story",
+    "ugc_review": "Review quote",
+    "gift_idea": "Gift idea",
+    "product_feature": "Product feature",
+    "discount_offer": "Discount offer"
+  }
+}

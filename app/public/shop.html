@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Juniper &amp; Clay – Shop (simulated)</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body style="background:#fdfbf7">
+  <div class="topbar" style="background:#fdfbf7"><div class="inner">
+    <span class="logo" style="font-family: Georgia, serif; font-weight:700">Juniper &amp; Clay</span>
+    <span style="flex:1"></span>
+    <span class="pill warn">Simulated storefront for the demo</span>
+  </div></div>
+  <div class="wrap" style="max-width:760px">
+    <div id="ref" class="banner" style="margin-bottom:16px; display:none"></div>
+    <div class="card">
+      <div class="grid g2" style="align-items:center">
+        <div style="aspect-ratio:1; border-radius:12px; background: radial-gradient(circle at 35% 30%, #efe6d8, #cbb89d 60%, #a68d6d); display:flex; align-items:center; justify-content:center; color:#5b4a35; font-family: Georgia, serif; font-size:20px" id="img"></div>
+        <div>
+          <h2 id="name" style="font-family: Georgia, serif"></h2>
+          <div id="price" style="font-size:22px; font-weight:700"></div>
+          <ul id="points" class="small muted" style="padding-left:18px"></ul>
+          <div class="grid g2" style="gap:10px; margin-top:10px">
+            <div><label>Quantity</label><input id="qty" type="number" min="1" max="10" value="1"></div>
+            <div><label>Discount code</label><input id="code" placeholder="e.g. JC-AB12"></div>
+          </div>
+          <button id="buy" class="btn primary" style="margin-top:12px; width:100%">Place order (simulated)</button>
+          <p id="out" class="small" style="margin-top:10px"></p>
+        </div>
+      </div>
+    </div>
+    <p id="badge" class="small" style="margin-top:14px; display:none; text-align:center"><a href="/?utm_source=lumi_badge&utm_medium=referral" target="_blank">Made with Lumi · see which posts bring you orders</a></p>
+    <p class="small muted" style="margin-top:14px">This page stands in for the merchant's Shopify store. The order is attributed by discount code first, otherwise by the last tracked-link click in the past 30 days. Then go back to Lumi → Results.</p>
+  </div>
+  <script src="/lumi.js"></script>
+  <script>
+    const q = new URLSearchParams(location.search);
+    const ref = q.get('ref');
+    let product;
+    (async () => {
+      const data = await Lumi.api(`/api/shop/link/${encodeURIComponent(ref || 'none')}?product=${encodeURIComponent(q.get('product') || '')}`);
+      product = data.product;
+      document.getElementById('name').textContent = product.name;
+      document.getElementById('img').textContent = product.name.split(' ')[0];
+      document.getElementById('price').textContent = Lumi.money(product.price);
+      document.getElementById('points').innerHTML = product.selling_points.map((p) => `<li>${Lumi.esc(p)}</li>`).join('');
+      if (data.badge) document.getElementById('badge').style.display = 'block';
+      if (ref) {
+        const el = document.getElementById('ref');
+        el.style.display = 'block';
+        el.innerHTML = `You arrived through a Lumi tracked link <b class="mono">${Lumi.esc(ref)}</b>${data.channel ? ` from ${Lumi.esc(Lumi.titleCase(data.channel))}` : ''}. The click was counted by the redirect.`;
+      }
+    })();
+    document.getElementById('buy').addEventListener('click', async () => {
+      const out = document.getElementById('out');
+      try {
+        const r = await Lumi.api('/api/shop/order', { method: 'POST', body: { product_id: product.id, quantity: document.getElementById('qty').value, discount_code: document.getElementById('code').value.trim() || undefined, ref } });
+        const o = r.order;
+        out.innerHTML = o.attribution_method
+          ? `<span class="pill good">Order ${Lumi.money(o.value)} attributed by ${o.attribution_method.replace('_', ' ')}</span> to post <span class="mono">${Lumi.esc(o.post_id || '(link without post)')}</span>${r.discount_applied ? ' · 10% off applied' : ''}`
+          : `<span class="pill">Order ${Lumi.money(o.value)} placed, not attributed</span> (no valid code and no recent tracked click)`;
+      } catch (err) { out.textContent = err.message; }
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lumi – See which posts bring orders</title>
+  <link rel="stylesheet" href="/style.css">
+  <style>
+    .hero { display: grid; grid-template-columns: 1.15fr .85fr; gap: 40px; align-items: center; padding: 56px 0 32px; }
+    @media (max-width: 860px) { .hero { grid-template-columns: 1fr; padding-top: 28px; } }
+    .hero h1 span { color: var(--accent); }
+    .lead { font-size: 18px; color: var(--muted); max-width: 520px; }
+    .steps { counter-reset: s; }
+    .steps .card { position: relative; padding-top: 44px; }
+    .steps .card::before { counter-increment: s; content: counter(s); position: absolute; top: 14px; left: 18px; width: 22px; height: 22px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); font-weight: 700; font-size: 13px; display: flex; align-items: center; justify-content: center; }
+    .mock-result td { padding: 7px 8px; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <div class="topbar"><div class="inner">
+    <a class="logo" href="/"><span class="dot"></span>Lumi</a>
+    <span class="muted small">AI marketing assistant for small shops</span>
+    <span style="flex:1"></span>
+    <a class="btn sm ghost" href="/app">Sign in</a>
+  </div></div>
+
+  <div class="wrap">
+    <section class="hero">
+      <div>
+        <span class="pill accent">New in Lumi v2</span>
+        <h1 style="margin-top:12px">Know which posts <span>bring orders</span>. Lumi writes the next one.</h1>
+        <p class="lead">Every post Lumi writes comes with a tracked link and its own discount code. You see clicks, orders and revenue per post, and Lumi learns what works for your shop.</p>
+        <form id="signup" class="row" style="margin-top:20px; max-width:480px">
+          <input id="email" type="email" required placeholder="you@yourshop.com" style="flex:1; min-width:220px">
+          <button class="btn primary" type="submit">Start free</button>
+        </form>
+        <p class="small muted" style="margin-top:8px">Free: 10 posts a month, no card needed. Pro: $29/month.</p>
+        <p id="err" class="small" style="color:var(--bad)"></p>
+      </div>
+      <div class="card">
+        <div class="row spread"><h3 style="margin:0">Last 30 days</h3><span class="pill good">+3 orders vs average</span></div>
+        <table class="mock-result" style="margin-top:8px">
+          <tr><th>Post</th><th class="num">Clicks</th><th class="num">Orders</th></tr>
+          <tr><td>Kiln opening, 60 seconds</td><td class="num">260</td><td class="num">9</td></tr>
+          <tr><td>Dipping bowls in ocean glaze</td><td class="num">198</td><td class="num">6</td></tr>
+          <tr><td>Gift box for the person who wants nothing</td><td class="num">92</td><td class="num">5</td></tr>
+          <tr><td>Planter sale, 20% off</td><td class="num">81</td><td class="num">1</td></tr>
+        </table>
+        <p class="small muted" style="margin:10px 0 0">Behind-the-scenes posts bring 1.9× your average orders. Want one for the Holiday Gift Box?</p>
+      </div>
+    </section>
+
+    <section class="grid g3 steps">
+      <div class="card"><h3>Write with your data</h3><p class="muted small">Lumi reads your products, reviews and past results, then writes 3 versions in your voice.</p></div>
+      <div class="card"><h3>Every post is tracked</h3><p class="muted small">A short link and a unique discount code go into each post, so orders are counted even from DMs or in store.</p></div>
+      <div class="card"><h3>See what sells</h3><p class="muted small">Clicks, orders and revenue per post, compared with your average. A weekly review tells you what to post next.</p></div>
+    </section>
+
+    <section class="card" style="margin-top:24px" id="source-card">
+      <div class="row spread">
+        <h3 style="margin:0">Ad source captured on this visit</h3>
+        <span class="pill">demo panel, not in the real landing page</span>
+      </div>
+      <p class="small muted">Lumi stores these in a first-party cookie, binds them to your account at sign-up, and sends them with the sign-up and payment events.</p>
+      <div id="source" class="mono small"></div>
+      <p class="small muted" style="margin:10px 0 0">Try: <a href="/?utm_source=tiktok&utm_medium=paid&utm_campaign=q4_smb&utm_content=kiln_video&ttclid=E.C.P.demo123">/?utm_source=tiktok&amp;utm_medium=paid&amp;utm_campaign=q4_smb&amp;ttclid=…</a></p>
+    </section>
+  </div>
+
+  <script src="/lumi.js"></script>
+  <script>
+    const anon = Lumi.anonymousId();
+    const touch = Lumi.captureTouch();
+    const t = touch.current || {};
+    Lumi.track('landing_view', {
+      anonymous_id: anon,
+      utm_source: t.utm_source, utm_medium: t.utm_medium, utm_campaign: t.utm_campaign, utm_content: t.utm_content,
+      ttclid: t.ttclid, referrer: document.referrer || undefined,
+    });
+    const show = (label, obj) => `<div><b>${label}:</b> ${obj ? Lumi.esc(Object.entries(obj).filter(([k]) => !['ts', 'landing_path', 'referrer'].includes(k)).map(([k, v]) => `${k}=${v}`).join('  ')) : '<span class="faint">none (direct visit)</span>'}</div>`;
+    document.getElementById('source').innerHTML = show('first touch', touch.first) + show('last touch', touch.last) + `<div><b>anonymous_id:</b> ${anon}</div>`;
+
+    document.getElementById('signup').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      try {
+        const now = Lumi.captureTouch();
+        await Lumi.api('/api/signup', { method: 'POST', body: { email: document.getElementById('email').value, anonymous_id: anon, first_touch: now.first, last_touch: now.last, platform: 'web' } });
+        location.href = '/app';
+      } catch (err) { document.getElementById('err').textContent = err.message; }
+    });
+  </script>
+</body>
+</html>

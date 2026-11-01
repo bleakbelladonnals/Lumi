@@ -1,0 +1,467 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lumi v2 – Clickable prototype</title>
+<style>
+/*STYLE*/
+.proto-bar { background: #1d1b18; color: #f3f1ec; font-size: 13px; }
+.proto-bar .inner { max-width: 1160px; margin: 0 auto; padding: 8px 20px; display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+.proto-bar button { background: #34312c; color: #f3f1ec; border: 1px solid #4a463f; border-radius: 6px; padding: 3px 9px; font: inherit; cursor: pointer; }
+.proto-bar button.on { background: var(--accent); border-color: var(--accent); }
+.page { display: none; }
+.page.on { display: block; }
+.hero { display: grid; grid-template-columns: 1.15fr .85fr; gap: 40px; align-items: center; padding: 48px 0 28px; }
+@media (max-width: 860px) { .hero { grid-template-columns: 1fr; } }
+.hero h1 span { color: var(--accent); }
+.flow { display: flex; gap: 8px; flex-wrap: wrap; font-size: 12px; }
+.flow span { background: #fff; border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px; }
+.typing::after { content: '▋'; animation: blink 1s steps(1) infinite; color: var(--accent); }
+@keyframes blink { 50% { opacity: 0; } }
+</style>
+</head>
+<body>
+<div class="proto-bar"><div class="inner">
+  <b>Prototype controls</b>
+  <span>Plan:</span><button data-plan="free">Free</button><button data-plan="pro">Pro</button>
+  <span id="pc-credits"></span><button id="pc-use">Use up credits</button><button id="pc-metrics">Internal metrics</button><button id="pc-reset">Reset</button>
+  <span style="flex:1"></span>
+  <span class="faint">Hard-coded data and replies. The runnable version is in /app.</span>
+</div></div>
+
+<!-- ========== Landing ========== -->
+<div class="page" id="p-landing">
+  <div class="topbar"><div class="inner"><span class="logo"><span class="dot"></span>Lumi</span><span class="muted small">AI marketing assistant for small shops</span><span style="flex:1"></span><button class="btn sm" data-go="app">Sign in</button></div></div>
+  <div class="wrap">
+    <section class="hero">
+      <div>
+        <span class="pill accent">New in Lumi v2</span>
+        <h1 style="margin-top:12px">Know which posts <span>bring orders</span>. Lumi writes the next one.</h1>
+        <p class="muted" style="font-size:18px; max-width:520px">Every post Lumi writes comes with a tracked link and its own discount code. You see clicks, orders and revenue per post, and Lumi learns what works for your shop.</p>
+        <div class="row" style="max-width:480px; margin-top:18px"><input placeholder="you@yourshop.com" value="maya@juniperclay.com" style="flex:1; min-width:200px"><button class="btn primary" data-go="app">Start free</button></div>
+        <p class="small muted" style="margin-top:8px">Free: 10 posts a month, no card needed. Pro: $29/month.</p>
+        <div class="card tight small" style="margin-top:16px; max-width:520px">
+          <b>Captured from the ad click</b> <span class="pill">visible in prototype only</span>
+          <div class="mono muted" style="margin-top:6px">utm_source=tiktok · utm_medium=paid · utm_campaign=q4_smb · ttclid=E.C.P.demo123</div>
+          <div class="muted" style="margin-top:4px">Saved in a first-party cookie, bound to the account at sign-up, sent with sign_up and subscription_started.</div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="row spread"><h3 style="margin:0">Last 30 days</h3><span class="pill good">Best: behind the scenes</span></div>
+        <table style="margin-top:8px"><tr><th>Post</th><th class="num">Clicks</th><th class="num">Orders</th></tr>
+          <tr><td>Kiln opening, 60 seconds</td><td class="num">260</td><td class="num">9</td></tr>
+          <tr><td>Dipping bowls in ocean glaze</td><td class="num">198</td><td class="num">6</td></tr>
+          <tr><td>Gift box for the person who wants nothing</td><td class="num">92</td><td class="num">5</td></tr>
+          <tr><td>Planter sale, 20% off</td><td class="num">81</td><td class="num">1</td></tr></table>
+      </div>
+    </section>
+    <div class="flow"><span>1 · Ad click with UTM</span><span>2 · Sign up</span><span>3 · Home: how posts did + what to post next</span><span>4 · Write in 4 steps</span><span>5 · Code in caption, link in bio, "I've posted it"</span><span>6 · Customer orders</span><span>7 · Orders per post back on Home</span></div>
+  </div>
+</div>
+
+
+<!-- ========== App ========== -->
+<div class="page" id="p-app">
+  <div class="topbar"><div class="inner">
+    <span class="logo"><span class="dot"></span>Lumi</span>
+    <nav class="tabs" id="tabs">
+      <button class="tab" data-tab="home">Home</button>
+      <button class="tab" data-tab="write">Write</button>
+      <button class="tab" data-tab="results">Results</button>
+      <button class="tab" data-tab="plan">Plan</button>
+    </nav>
+    <span style="flex:1"></span>
+    <div class="row small" style="gap:10px"><span id="plan-pill" class="pill"></span><div class="row" style="gap:6px"><div class="meter" id="meter"><span></span></div><span id="credits" class="muted"></span></div><button class="btn sm ghost" data-go="landing">Sign out</button></div>
+  </div></div>
+  <div class="wrap">
+    <section class="tabp" id="t-home"></section>
+    <section class="tabp" id="t-write" hidden>
+      <ol class="stepper" id="stepper"><li data-s="1"><span>1</span>Product</li><li data-s="2"><span>2</span>Where and how</li><li data-s="3"><span>3</span>Pick a version</li><li data-s="4"><span>4</span>Post it</li></ol>
+      <div id="wizard"></div>
+    </section>
+    <section class="tabp" id="t-results" hidden><h2>Results</h2><div id="r-body"></div></section>
+    <section class="tabp" id="t-plan" hidden><div id="plan-body"></div></section>
+    <section class="tabp" id="t-metrics" hidden>
+      <div class="banner" style="margin-bottom:14px">Internal page for the team, not shown to merchants. Sample numbers for month 1 after launch.</div>
+      <h2>Is v2 working? One number per month</h2>
+      <p class="small muted">From Part A (A4). Each number is computed from the events in the PRD tracking plan.</p>
+      <div class="grid g3">
+        <div class="card"><div class="row spread"><span class="small muted"><b>Month 1</b> · seed Pro users who published a tracked post within 7 days</span><span class="pill good">on target</span></div><div class="tile"><div class="value">62%</div></div><div class="small muted">31 of 50 · target ≥ 50% · from tracked_link_created + first tracked_link_click</div></div>
+        <div class="card"><div class="row spread"><span class="small muted"><b>Month 2</b> · new paid users on v2</span><span class="pill">not started</span></div><div class="tile"><div class="value">–</div></div><div class="small muted">Target ≥ 100 · from subscription_started</div></div>
+        <div class="card"><div class="row spread"><span class="small muted"><b>Month 3</b> · 30-day paid retention</span><span class="pill">not started</span></div><div class="tile"><div class="value">–</div></div><div class="small muted">Target ≥ 45% (today about 26%) · from subscription_started and cancellations</div></div>
+      </div>
+      <h3 style="margin-top:20px">Leading indicators and stop signals</h3>
+      <div class="grid g3">
+        <div class="card"><span class="small muted">Pro users who opened Results this week</span><div class="tile"><div class="value">48%</div></div><div class="small muted">Stop adding features if below 30% at the end of month 2 · from report_viewed</div></div>
+        <div class="card"><span class="small muted">Paywall → paid at $29</span><div class="tile"><div class="value">4.1%</div></div><div class="small muted">$19 baseline 5.2%, so $29 converts at 79% of it (roll back below 60%) · from paywall_view</div></div>
+        <div class="card"><span class="small muted">Model cost per active user</span><div class="tile"><div class="value">$0.14</div></div><div class="small muted">Free on the cheaper model, was $0.35 · from post_generated</div></div>
+      </div>
+      <div class="grid g2" style="margin-top:16px; align-items:start">
+        <div class="card"><h3>Paid users by first-touch source</h3>
+          <table><tr><th>Source</th><th class="num">Sign-ups</th><th class="num">Paid</th><th class="num">Still paying at day 30</th></tr>
+          <tr><td>Email list</td><td class="num">410</td><td class="num">14</td><td class="num">–</td></tr>
+          <tr><td>Instagram (group accounts)</td><td class="num">620</td><td class="num">5</td><td class="num">–</td></tr>
+          <tr><td>TikTok ads</td><td class="num">1,950</td><td class="num">22</td><td class="num">–</td></tr>
+          <tr><td>Referral</td><td class="num">96</td><td class="num">3</td><td class="num">–</td></tr></table>
+        </div>
+        <div class="card"><h3>Attribution check (case data, last month)</h3>
+          <table><tr><td>TikTok Ads Manager reports</td><td class="num">162</td></tr><tr><td>Our backend, source = TikTok</td><td class="num"><b>118</b></td></tr><tr><td>Our backend, source unknown</td><td class="num">31</td></tr></table>
+          <p class="small" style="margin-top:8px">Even if all 31 unknowns came from TikTok, the most is 149, still below 162. Budget with <b>118 to 149</b>, judged on retention and LTV/CAC. The platform number is only for optimizing creatives.</p>
+        </div>
+      </div>
+    </section>
+  </div>
+  <button class="fab" id="fab"><span class="dot"></span>Ask Lumi</button>
+  <aside class="drawer" id="drawer">
+    <div class="drawer-head"><b>Lumi assistant</b><span style="flex:1"></span><button class="btn sm ghost" id="drawer-close">✕</button></div>
+    <div class="msgs" id="msgs"></div>
+    <div class="drawer-foot">
+      <div class="chips" id="chips"></div>
+      <div class="composer"><textarea placeholder="In the prototype, pick one of the suggestions above" disabled></textarea><button class="btn primary" disabled>Send</button></div>
+    </div>
+  </aside>
+</div>
+
+<!-- Paywall -->
+<div class="modal-bg" id="paywall"><div class="modal">
+  <div class="row spread"><span class="pill accent">Lumi Pro</span><button class="btn sm ghost" data-close>Close</button></div>
+  <h2 id="pw-title" style="margin-top:12px"></h2>
+  <p class="muted" id="pw-sub"></p>
+  <div class="card tight small" style="background:var(--accent-soft); border:0; box-shadow:none"><b>Your latest post</b> (Holiday Gift Box, Oct 27) got <b>150 clicks</b> and <b>4 orders</b> worth $256. 11 more posts have results waiting.</div>
+  <ul style="padding-left:18px; margin:16px 0"><li>Results for every post, ranked by orders and revenue</li><li>Weekly review: what sold and what to post next</li><li>300 posts a month (top up 200 more for $9)</li><li>Best model, no "Made with Lumi" badge</li></ul>
+  <div class="grid g2"><button class="btn primary" data-upgrade>$29 / month</button><button class="btn" data-upgrade>$24 / month, billed yearly</button></div>
+  <p class="small muted" style="margin:10px 0 0">Cancel anytime. Your tracked links keep working on Free.</p>
+</div></div>
+
+<script>
+const D = /*DATA*/;
+const S = { plan: 'free', left: 3, page: 'landing', tab: 'home', gens: 0, posted: false, wiz: { step: 1, product: 'p6', channel: 'tiktok', angle: 'behind_the_scenes', post: null, variant: null, published: false } };
+const LIMIT = { free: 10, pro: 300 };
+const $ = (s) => document.querySelector(s);
+const $$ = (s) => [...document.querySelectorAll(s)];
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const money = (n) => '$' + n.toLocaleString('en-US');
+const product = (id) => D.products.find((p) => p.id === id);
+const ch = (c) => ({ tiktok: 'TikTok', instagram: 'Instagram', facebook: 'Facebook' }[c] || c);
+const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
+
+// Same numbers as the runnable app: last 30 days up to the demo date, compared with the 30 days before.
+const DAY = 864e5;
+const asOf = Date.parse(D.as_of) + DAY - 1;
+const day = (ms) => new Date(ms).toISOString().slice(0, 10);
+function stats(list) {
+  const sum = (k) => list.reduce((s, p) => s + p[k], 0);
+  return { posts: list.length, clicks: sum('clicks'), orders: sum('orders'), revenue: sum('revenue'), avg: list.length ? Math.round((sum('orders') / list.length) * 10) / 10 : 0 };
+}
+function group(list, key, label) {
+  const g = {};
+  list.forEach((p) => (g[p[key]] ||= []).push(p));
+  return Object.entries(g).map(([k, l]) => ({ key: k, name: label(k), ...stats(l), perPost: Math.round(stats(l).revenue / l.length) })).sort((a, b) => b.avg - a.avg);
+}
+function summary(days = 30) {
+  const cut = day(asOf - days * DAY);
+  const prevCut = day(asOf - 2 * days * DAY);
+  const cur = D.posts.filter((p) => p.date > cut);
+  const prev = D.posts.filter((p) => p.date > prevCut && p.date <= cut);
+  const t = stats(cur);
+  const b = stats(prev);
+  const pct = (k) => (b[k] ? Math.round(((t[k] - b[k]) / b[k]) * 100) : null);
+  const byAngle = group(cur, 'angle', (k) => D.angles[k]);
+  const byChannel = group(cur, 'channel', ch);
+  const byProduct = group(cur, 'product_id', (k) => product(k).name).sort((a, b2) => b2.perPost - a.perPost);
+  const top = [...cur].sort((a, b2) => b2.orders - a.orders)[0];
+  return { t, change: { orders: pct('orders'), revenue: pct('revenue'), clicks: pct('clicks') }, byAngle, byChannel, byProduct, top, findings: [
+    `${byAngle[0].name} posts bring ${byAngle[0].avg} orders each, ${Math.round((byAngle[0].avg / t.avg) * 10) / 10}x the average of ${t.avg}.`,
+    `${byChannel[0].name} brings ${byChannel[0].avg} orders per post; ${byChannel.at(-1).name} brings ${byChannel.at(-1).avg}.`,
+    `${byProduct[0].name} earns the most per post: $${byProduct[0].perPost}.`,
+    `${byAngle.at(-1).name} posts bring the least: ${plural(byAngle.at(-1).avg, 'order')} each.`,
+  ] };
+}
+const S30 = summary(30);
+const S90 = summary(90);
+const latest = [...D.posts].sort((a, b) => b.date.localeCompare(a.date))[0];
+const REC = { product: 'p6', channel: 'tiktok', angle: 'behind_the_scenes', reason: 'Holiday Gift Box (Mug + Candle) earns $288 per post and has 80 in stock. Behind the scenes posts bring 7.3 orders each.' };
+const REC_FREE = { product: 'p3', channel: 'instagram', angle: 'ugc_review', reason: 'Mini Bud Vase is rated 4.9 from 341 reviews, so real customer quotes make an easy first post.' };
+const rec = () => (S.plan === 'pro' ? REC : REC_FREE);
+const pill = (v) => (v == null ? '' : `<span class="pill ${v > 5 ? 'good' : v < -5 ? 'bad' : ''}">${v > 0 ? '+' : ''}${v}%</span>`);
+const HOW = '<details class="how small"><summary>How orders are counted</summary><p>An order counts for a post when the customer uses that post\'s discount code. Without a code, it counts for the last tracked link they clicked in the 30 days before buying. Bots and repeat clicks are ignored.</p></details>';
+
+function go(page) { S.page = page; $$('.page').forEach((p) => p.classList.toggle('on', p.id === 'p-' + page)); render(); window.scrollTo(0, 0); }
+function tab(t) { S.tab = t; render(); window.scrollTo(0, 0); }
+function render() {
+  $$('[data-plan]').forEach((b) => b.classList.toggle('on', b.dataset.plan === S.plan));
+  $('#pc-credits').textContent = `Credits left: ${S.left}/${LIMIT[S.plan]}`;
+  $('#plan-pill').textContent = S.plan === 'pro' ? 'Pro' : 'Free';
+  $('#plan-pill').className = 'pill ' + (S.plan === 'pro' ? 'accent' : '');
+  $('#credits').textContent = `${S.left}/${LIMIT[S.plan]} credits`;
+  $('#meter span').style.width = (S.left / LIMIT[S.plan]) * 100 + '%';
+  $('#meter').classList.toggle('low', S.left <= 1);
+  $$('.tab').forEach((b) => b.classList.toggle('active', b.dataset.tab === S.tab));
+  $$('.tabp').forEach((p) => { p.hidden = p.id !== 't-' + S.tab; });
+  if (S.tab === 'home') renderHome();
+  if (S.tab === 'write') renderWizard();
+  if (S.tab === 'results') renderResults();
+  if (S.tab === 'plan') renderPlan();
+  renderChips();
+}
+
+// ---------- home ----------
+function renderHome() {
+  const r = rec();
+  const p = product(r.product);
+  let main;
+  if (S.plan === 'pro') {
+    const { t, change, top } = S30;
+    main = `<div class="card headline-card"><p class="headline">Your posts brought <b>${t.orders} orders</b> and <b>${money(t.revenue)}</b> in the last 30 days, up ${change.orders}% on the 30 days before.</p>${HOW}</div>
+      <div class="grid g4">
+        <div class="card tile"><div class="label">Orders</div><div class="value">${t.orders}</div>${pill(change.orders)}</div>
+        <div class="card tile"><div class="label">Revenue</div><div class="value">${money(t.revenue)}</div>${pill(change.revenue)}</div>
+        <div class="card tile"><div class="label">Link clicks</div><div class="value">${t.clicks}</div>${pill(change.clicks)}</div>
+        <div class="card tile"><div class="label">Posts</div><div class="value">${t.posts}</div><span class="small faint">${money(Math.round(t.revenue / t.posts))} per post</span></div>
+      </div>
+      <div class="card"><h3>What sells for you</h3><ul class="findings">${S30.findings.map((f) => `<li>${esc(f)}</li>`).join('')}</ul><div class="row"><button class="btn sm" data-tab="results">See every post</button><button class="btn sm ghost" onclick="play(0)">Ask why</button></div></div>
+      <div class="card"><div class="row spread"><h3 style="margin:0">Best post</h3><span class="small faint">${top.date} · ${ch(top.channel)} · ${D.angles[top.angle]}</span></div><p class="quote">${esc(top.caption)}</p><div class="row small"><b>${top.orders} orders · ${money(top.revenue)}</b><span class="muted">${esc(product(top.product_id).name)}</span><span class="pill good">+${Math.round(((top.orders - t.avg) / t.avg) * 100)}% vs your average</span></div></div>`;
+  } else {
+    main = `<div class="card headline-card"><p class="headline">${S.posted ? 'Your latest post (Mini Bud Vase on Instagram) is live. Clicks and orders show up here as they come in.' : `Your latest post (${esc(product(latest.product_id).name)}, ${latest.date}) brought <b>${latest.orders} orders</b> worth <b>${money(latest.revenue)}</b> from ${latest.clicks} clicks.`}</p>${HOW}</div>
+      <div class="card lock-teaser"><div class="lock-icon">🔒</div><div><b>See which of your ${D.posts.length} posts sell</b><p class="small muted" style="margin:4px 0 10px">Free shows your latest post. Pro shows totals, which styles and channels bring orders, and your best posts.</p><button class="btn sm primary" onclick="paywall('feature')">Unlock all results</button></div></div>`;
+  }
+  const steps = [['Connect your shop', true], ['Write your first post', S.gens > 0], ['Post it and put the link in your bio', S.posted], ['Get your first tracked click', false]];
+  $('#t-home').innerHTML = `
+    <div class="row spread" style="margin-bottom:12px"><div><h2 style="margin:0">Hi ${esc(D.merchant.owner)}</h2><p class="small muted" style="margin:0">${esc(D.merchant.name)}</p></div>${S.plan === 'pro' ? '<select style="width:auto"><option>Last 30 days</option><option>Last 7 days</option><option>Last 90 days</option></select>' : ''}</div>
+    <div class="grid side-r-wide" style="align-items:start">
+      <div class="stack">${main}</div>
+      <div class="stack">
+        <div class="card next-card"><div class="label">Next post</div><h3 style="margin:4px 0">${esc(p.name)}</h3><div class="small muted">${ch(r.channel)} · ${D.angles[r.angle]}</div><p class="small" style="margin:8px 0 12px">${esc(r.reason)}</p><button class="btn primary" onclick="writeRec()">Write this post</button></div>
+        ${S.plan === 'pro' ? '' : `<div class="card"><h3>Getting started</h3><ol class="checklist">${steps.map(([l, d]) => `<li class="${d ? 'done' : ''}">${l}</li>`).join('')}</ol></div>`}
+        ${S.posted ? '<div class="card"><h3>Waiting for the first click</h3><div class="small row spread"><span>Mini Bud Vase · Instagram</span><span class="faint">today</span></div><p class="small faint" style="margin:6px 0 0">Check the link is in your bio. Clicks usually start within a day.</p></div>' : ''}
+      </div>
+    </div>`;
+}
+function writeRec() { const r = rec(); Object.assign(S.wiz, { step: 2, product: r.product, channel: r.channel, angle: r.angle, post: null, variant: null, published: false }); tab('write'); }
+
+// ---------- write ----------
+function makePost(pid, channel) {
+  const p = product(pid);
+  const code = 'JC-' + Math.random().toString(36).slice(2, 6).toUpperCase();
+  const link = 'lumi.link/' + Math.random().toString(36).slice(2, 8);
+  const inCaption = channel === 'facebook';
+  const tail = inCaption ? `Shop: ${link} · code ${code} for 10% off.` : `Use ${code} for 10% off. Link in bio.`;
+  const review = (D.reviews.find((r) => r.product_id === pid) || { text: 'Lovely.' }).text;
+  return { id: 'post_' + code.slice(3).toLowerCase(), pid, channel, code, link, inCaption, versions: [
+    { label: 'Behind the scenes', caption: `Packing these by hand tonight. Every ${p.name.toLowerCase()} gets a handwritten note, because that is the part people remember.\n\n${tail}`, tags: '#handmade #ceramics #smallbusiness' },
+    { label: 'Customer voice', caption: `"${review}"\n\nThat is why we keep making the ${p.name}. ${money(p.price)}. ${tail}`, tags: '#customerlove #handmade' },
+    { label: 'Gift idea', caption: `For the person who says they want nothing: the ${p.name}. ${p.selling_points[0]}.\n\n${tail}`, tags: '#giftidea #shopsmall' },
+  ] };
+}
+function renderWizard() {
+  const w = S.wiz;
+  $$('#stepper li').forEach((li) => { const n = +li.dataset.s; li.className = n < w.step ? 'done' : n === w.step ? 'current' : ''; });
+  const r = rec();
+  const box = $('#wizard');
+  if (w.step === 1) {
+    const list = [...D.products].sort((a, b) => (b.id === r.product) - (a.id === r.product));
+    box.innerHTML = `<div class="card wiz-card"><h2>What do you want to sell?</h2><div class="stack">${list.map((p) => `<button class="choice ${p.id === w.product ? 'on' : ''}" onclick="S.wiz.product='${p.id}'; renderWizard()"><div class="row spread"><b>${esc(p.name)}</b><span>${money(p.price)}</span></div><div class="small faint">${p.stock} in stock · ${p.rating} ★ from ${p.review_count} reviews</div>${p.id === r.product ? `<div class="small suggest"><span class="pill good">Suggested</span> ${esc(r.reason)}</div>` : ''}</button>`).join('')}</div><div class="wiz-actions"><span></span><button class="btn primary" onclick="S.wiz.step=2; renderWizard()">Continue</button></div></div>`;
+  }
+  if (w.step === 2) {
+    const ranked = S.plan === 'pro' ? S90.byAngle : null;
+    const angles = Object.entries(D.angles).map(([id, label]) => ({ id, label, g: ranked?.find((x) => x.key === id) }));
+    if (ranked) angles.sort((a, b) => (b.g?.avg ?? -1) - (a.g?.avg ?? -1));
+    box.innerHTML = `<div class="card wiz-card"><div class="small muted">${esc(product(w.product).name)} · <a href="#" onclick="S.wiz.step=1; renderWizard(); return false">change</a></div>
+      <h2>Where will you post it?</h2><div class="row">${[['instagram', 'Instagram', 'connected'], ['tiktok', 'TikTok', 'connected'], ['facebook', 'Facebook', '']].map(([id, l, n]) => `<button class="choice inline ${id === w.channel ? 'on' : ''}" onclick="S.wiz.channel='${id}'; renderWizard()">${l} ${n ? `<span class="small faint">${n}</span>` : ''}</button>`).join('')}</div>
+      <p class="small muted" style="margin-top:8px">${w.channel === 'facebook' ? 'The tracked link goes right in the post.' : `Links in ${ch(w.channel)} captions can't be tapped, so each version carries its own discount code to track sales, and the tracked link goes in your bio.`}</p>
+      <h2 style="margin-top:18px">How should it sound?</h2><div class="stack">${angles.map((a, i) => `<button class="choice ${a.id === w.angle ? 'on' : ''}" onclick="S.wiz.angle='${a.id}'; renderWizard()"><div class="row spread"><span>${a.label}</span>${ranked ? (a.g ? `<span class="small ${i === 0 ? 'pill good' : 'faint'}">${i === 0 ? 'Sells best · ' : ''}${a.g.avg} orders per post</span>` : '<span class="small faint">not tried yet</span>') : ''}</div></button>`).join('')}</div>
+      ${ranked ? '<p class="small faint" style="margin-top:6px">Ranked by orders per post in your shop, last 90 days.</p>' : '<p class="small muted" style="margin-top:6px">🔒 Pro ranks these styles by what actually sold in your shop. <a href="#" onclick="paywall(\'feature\'); return false">See how</a></p>'}
+      <div class="wiz-actions"><button class="btn ghost" onclick="S.wiz.step=1; renderWizard()">Back</button><div class="row" style="gap:8px"><span class="small faint">${S.left} of ${LIMIT[S.plan]} credits left</span><button class="btn primary" onclick="generate()">Write 3 versions · 1 credit</button></div></div></div>`;
+  }
+  if (w.step === 3) {
+    if (!w.post) { box.innerHTML = '<div class="card wiz-card"><p><span class="spinner"></span> Writing 3 versions from your reviews and what has sold before…</p></div>'; return; }
+    box.innerHTML = `<div class="card"><h2 style="margin:0">Pick the version you like</h2><p class="small muted">${esc(product(w.post.pid).name)} · ${ch(w.post.channel)} · discount code <b class="mono">${w.post.code}</b> (10% off) is already in each one</p>
+      <div class="grid g3">${w.post.versions.map((v, i) => `<div class="variant"><span class="pill">Version ${i + 1} · ${v.label}</span><div class="caption">${esc(v.caption)}</div><div class="small faint">${v.tags}</div><div class="row" style="margin-top:auto"><button class="btn sm primary" onclick="S.wiz.variant=${i}; S.wiz.step=4; renderWizard()">Use this version</button><button class="btn sm ghost" onclick="openDrawer(); play(2)">Change it</button></div></div>`).join('')}</div></div>`;
+  }
+  if (w.step === 4) {
+    const v = w.post.versions[w.variant];
+    if (w.published) {
+      box.innerHTML = `<div class="card wiz-card done-card"><h2>Posted. Nice.</h2><p>Lumi is now watching the code <b class="mono">${w.post.code}</b> and your tracked link. Clicks and orders show up on Home, usually within a day.</p><div class="row"><button class="btn primary" data-tab="home">Go to Home</button><button class="btn" onclick="Object.assign(S.wiz,{step:1,post:null,published:false}); renderWizard()">Write another post</button></div></div>`;
+      return;
+    }
+    box.innerHTML = `<div class="card wiz-card"><h2>Post it on ${ch(w.post.channel)}</h2><ol class="post-steps">
+      <li><b>Copy the caption</b><div class="caption-box">${esc(v.caption)}\n\n${v.tags}</div><button class="btn sm" onclick="toast('Caption copied')">Copy caption</button></li>
+      ${w.post.inCaption ? `<li><b>The tracked link is already in the caption</b></li>` : `<li><b>Put the tracked link in your bio</b> or on a story link sticker. The code in the caption still tracks the sale.<div class="row" style="margin-top:6px"><code class="link-box">${w.post.link}</code><button class="btn sm" onclick="toast('Link copied')">Copy link</button></div></li>`}
+      <li><b>Post it</b> on ${ch(w.post.channel)}, then come back and press the button.</li></ol>
+      <div class="wiz-actions"><button class="btn ghost" onclick="S.wiz.step=3; renderWizard()">Back to versions</button><button class="btn primary" onclick="S.wiz.published=true; S.posted=true; renderWizard()">I've posted it</button></div></div>`;
+  }
+}
+function generate() {
+  if (S.left <= 0) { paywall('quota'); return; }
+  S.wiz.step = 3; S.wiz.post = null; renderWizard();
+  setTimeout(() => {
+    S.left -= 1; S.gens += 1;
+    S.wiz.post = makePost(S.wiz.product, S.wiz.channel);
+    render();
+    if (S.left === 0 && S.plan === 'free') setTimeout(() => paywall('quota'), 900);
+  }, 900);
+}
+
+// ---------- results ----------
+function table(list) {
+  return `<div class="table-wrap"><table class="posts"><thead><tr><th>Date</th><th>Post</th><th>Style</th><th class="num">Clicks</th><th class="num">Orders</th><th class="num">Revenue</th><th class="num">vs your average</th></tr></thead><tbody>${list.map((p) => {
+    const avg = stats(D.posts).avg;
+    return `<tr><td class="small date" data-label="Date">${p.date}</td><td class="small post-cell">${esc(p.caption)}<div class="faint">${esc(product(p.product_id).name)} · ${ch(p.channel)}</div></td><td class="small" data-label="Style">${D.angles[p.angle]}</td><td class="num" data-label="Clicks">${p.clicks}</td><td class="num" data-label="Orders">${p.orders}</td><td class="num" data-label="Revenue">${money(p.revenue)}</td><td class="num" data-label="vs average">${S.plan === 'pro' ? pill(Math.round(((p.orders - avg) / avg) * 100)) : '–'}</td></tr>`;
+  }).join('')}</tbody></table></div>`;
+}
+function renderResults() {
+  const posts = [...D.posts].sort((a, b) => b.date.localeCompare(a.date));
+  if (S.plan === 'free') {
+    const fake = Array.from({ length: 5 }, () => '<tr class="locked-row"><td>2026-10-00</td><td>Hidden post caption for preview</td><td>Style</td><td class="num">000</td><td class="num">0</td><td class="num">$000</td><td class="num">+00%</td></tr>').join('');
+    $('#r-body').innerHTML = `<div class="card">${table(posts.slice(0, 1))}<div class="lock-overlay"><table>${fake}</table><div class="lock-cta"><div class="card" style="text-align:center; max-width:380px"><b>${posts.length - 1} more posts have results</b><p class="small muted" style="margin:6px 0 10px">Free shows your latest post only. Pro shows every post ranked by orders, plus a weekly review of what to post next.</p><button class="btn primary" onclick="paywall('feature')">Unlock all results</button></div></div></div>${HOW}</div>`;
+    return;
+  }
+  const all = stats(D.posts);
+  const byAngle = group(D.posts, 'angle', (k) => D.angles[k]);
+  const max = byAngle[0].avg;
+  $('#r-body').innerHTML = `
+    <div class="card headline-card" style="margin-bottom:16px"><p class="headline">${all.posts} posts brought <b>${all.orders} orders</b> and <b>${money(all.revenue)}</b>. ${byAngle[0].name} posts sell best: ${byAngle[0].avg} orders each, ${Math.round((byAngle[0].avg / all.avg) * 10) / 10}× your average.</p><div class="row"><button class="btn sm primary" onclick="S.wiz.angle='${byAngle[0].key}'; S.wiz.step=1; tab('write')">Write a ${byAngle[0].name.toLowerCase()} post</button><button class="btn sm" onclick="openDrawer(); play(0)">Ask Lumi for a review</button></div>${HOW}</div>
+    <div class="grid side-r-wide" style="align-items:start">
+      <div class="card"><h3>Every post</h3>${table(posts)}</div>
+      <div class="card"><h3>Orders per post, by style</h3>${byAngle.map((g) => `<div class="small" style="margin:8px 0"><div class="row spread"><span>${g.name}</span><span class="muted">${g.avg} order${g.avg === 1 ? '' : 's'} per post · ${plural(g.posts, 'post')}</span></div><div class="bar-track" style="margin-top:3px"><div class="bar" style="width:${(g.avg / max) * 100}%"></div></div></div>`).join('')}<div class="small faint">Your average: ${all.avg} orders per post.</div></div>
+    </div>`;
+}
+
+// ---------- assistant (scripted, same tools as the app) ----------
+const LABELS = { get_results_summary: 'Checked your results', propose_post: 'Suggested a post', generate_post: 'Wrote 3 versions', revise_post: 'Rewrote the version', create_tracked_link: 'Made a tracked link' };
+let chatPost = null;
+const SCRIPTS = [
+  {
+    ask: 'How did my posts do this month?',
+    steps: [{ tool: 'get_results_summary', args: { days: 30 } }],
+    card: () => S.plan === 'pro'
+      ? `<div class="card tight small"><b>Last 30 days: ${S30.t.orders} orders · ${money(S30.t.revenue)} · ${S30.t.posts} posts</b> ${pill(S30.change.orders)}<ul class="findings">${S30.findings.map((f) => `<li>${esc(f)}</li>`).join('')}</ul></div>`
+      : `<div class="card tight small">Latest post: <b>${esc(product(latest.product_id).name)}</b>, ${latest.date}: ${latest.clicks} clicks, ${latest.orders} orders.<div class="row spread" style="margin-top:8px"><span class="muted">Totals and rankings are on Pro.</span><button class="btn sm primary" onclick="paywall('feature')">See all results</button></div></div>`,
+    forUser: () => S.plan !== 'pro',
+    reply: () => S.plan === 'pro'
+      ? `**${S30.t.orders} orders and ${money(S30.t.revenue)}** from ${S30.t.posts} posts, up ${S30.change.orders}% on orders.\n\n- ${S30.findings[0]}\n- ${S30.findings[1]}\n- ${S30.findings[2]}\n\nNext: write one more behind-the-scenes post. The Holiday Gift Box is a good fit.`
+      : `On Free I can see your latest post only: the **Holiday Gift Box TikTok (Oct 27)** got 150 clicks and 4 orders, $256.\n\nResults for your other ${D.posts.length - 1} posts, totals and rankings are on Pro.`,
+  },
+  {
+    ask: 'Write me a new post',
+    steps: [{ tool: 'get_results_summary', args: { days: 30 } }, { tool: 'propose_post', args: { product_id: 'p6', channel: 'tiktok', angle: 'behind_the_scenes', reason: REC.reason } }],
+    card: () => `<div class="card proposal"><div class="label">Suggested post</div><h3 style="margin:4px 0">Holiday Gift Box (Mug + Candle)</h3><div class="small muted">TikTok · Behind the scenes · $64, 80 in stock</div><p class="small" style="margin:8px 0 12px">${esc(REC.reason)}</p><div class="row"><button class="btn primary sm" onclick="accept(this)">Write 3 versions · 1 credit</button><span class="small faint">or tell me what to change</span></div></div>`,
+    forUser: () => true,
+    reply: () => 'Behind-the-scenes posts sell best for you, and the Gift Box earns the most per post with stock to spare. Press the button if it looks right; nothing is charged until you do.',
+  },
+  {
+    ask: 'Make version 2 shorter',
+    needsPost: true,
+    steps: [{ tool: 'revise_post', args: { variant: 2, instruction: 'shorter' } }],
+    card: () => { chatPost.versions[1].caption = `"${(D.reviews.find((r) => r.product_id === chatPost.pid) || { text: 'Lovely.' }).text}"\n\nUse ${chatPost.code} for 10% off. Link in bio.`; return versionsCard(chatPost, 1); },
+    forUser: () => true,
+    reply: () => 'Done: version 2 is now just the review quote and the code. Editing is free, no credit used.',
+  },
+  {
+    ask: 'Give me a tracked link for the Mini Bud Vase for my Instagram bio',
+    steps: [{ tool: 'create_tracked_link', args: { product_id: 'p3', channel: 'instagram', placement: 'bio' } }],
+    card: () => '<div class="card tight trackbox"><b>Mini Bud Vase</b> · Instagram · for your bio<br><span class="mono">lumi.link/bv3k9q</span><br>Code <b class="mono">JC-BIO7</b> gives 10% off and tracks orders without a click.</div>',
+    forUser: () => true,
+    reply: () => 'Put **lumi.link/bv3k9q** in your bio. Clicks and orders from it show up separately from your posts. Links are free, no credit used.',
+  },
+];
+function versionsCard(post, highlight) {
+  return `<div class="card tight"><div class="small"><b>${esc(product(post.pid).name)}</b> · ${ch(post.channel)} · code <b class="mono">${post.code}</b> · link goes in your bio</div><div class="stack" style="margin-top:8px">${post.versions.map((v, i) => `<div class="variant ${i === highlight ? 'chosen' : ''}"><span class="pill">Version ${i + 1} · ${v.label}</span><div class="caption">${esc(v.caption)}</div><div class="row"><button class="btn sm primary" onclick="useFromChat(${i})">Use this version</button></div></div>`).join('')}</div></div>`;
+}
+function useFromChat(i) { Object.assign(S.wiz, { post: chatPost, product: chatPost.pid, channel: chatPost.channel, variant: i, step: 4, published: false }); tab('write'); }
+async function accept(btn) {
+  if (playing) return;
+  if (S.left <= 0) { paywall('quota'); return; }
+  btn.disabled = true; btn.textContent = 'Writing…';
+  addMsg('user', 'Yes, write it.');
+  const bot = addMsg('bot', '');
+  await step(bot, { tool: 'generate_post', args: { proposal_id: 'prop_7f3a' } });
+  S.left -= 1; S.gens += 1; render();
+  chatPost = makePost('p6', 'tiktok');
+  const c = document.createElement('div'); c.innerHTML = versionsCard(chatPost); bot.appendChild(c);
+  await type(bot, 'Here are 3 versions, each with its own discount code. The tracked link goes in your bio. Pick one to get the posting checklist.');
+  btn.textContent = 'Written below';
+}
+function renderChips() { $('#chips').innerHTML = SCRIPTS.map((s, i) => `<button class="chip" onclick="play(${i})">${esc(s.ask)}</button>`).join(''); }
+let playing = false;
+async function step(bot, st) {
+  const d = document.createElement('details');
+  d.className = 'step';
+  d.innerHTML = `<summary><span class="spinner"></span><span>${LABELS[st.tool]}…</span><code class="faint small">${st.tool}</code></summary><div class="step-body"><pre>arguments: ${esc(JSON.stringify(st.args, null, 2))}</pre></div>`;
+  bot.appendChild(d); scroll();
+  await wait(700);
+  d.querySelector('.spinner').outerHTML = '<span class="pill good">done</span>';
+  return d;
+}
+async function type(bot, text) {
+  const t = document.createElement('div'); t.className = 'text typing'; bot.appendChild(t);
+  for (let k = 0; k <= text.length; k += 6) { t.innerHTML = md(text.slice(0, k)); scroll(); await wait(12); }
+  t.innerHTML = md(text); t.classList.remove('typing');
+}
+async function play(i) {
+  if (playing) return;
+  openDrawer();
+  const s = SCRIPTS[i];
+  if (s.needsPost && !chatPost) { addMsg('user', esc(s.ask)); addMsg('bot', '<div class="text"><p>Ask me to write a post first, then I can change it.</p></div>'); return; }
+  playing = true;
+  addMsg('user', esc(s.ask));
+  const bot = addMsg('bot', '');
+  let last;
+  for (const st of s.steps) last = await step(bot, st);
+  const c = document.createElement('div');
+  c.innerHTML = s.card();
+  if (s.forUser()) bot.appendChild(c); else last.querySelector('.step-body').prepend(c);
+  await type(bot, s.reply());
+  playing = false;
+}
+function md(s) {
+  return esc(s).split('\n\n').map((b) => {
+    const inl = (x) => x.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
+    if (b.split('\n').every((l) => /^- /.test(l))) return `<ul>${b.split('\n').map((l) => `<li>${inl(l.slice(2))}</li>`).join('')}</ul>`;
+    return `<p>${inl(b).replace(/\n/g, '<br>')}</p>`;
+  }).join('');
+}
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+const scroll = () => { const m = $('#msgs'); m.scrollTop = m.scrollHeight; };
+function addMsg(who, html) { const el = document.createElement('div'); el.className = 'msg ' + who; el.innerHTML = html; $('#msgs').appendChild(el); scroll(); return el; }
+function resetChat() { $('#msgs').innerHTML = ''; chatPost = null; addMsg('bot', '<div class="text"><p>Hi Maya. Ask me how your posts are doing, what to post next, or to change a post. The steps I take show under my answer; tap one to see the details.</p></div>'); }
+function openDrawer() { document.body.classList.add('drawer-open'); }
+$('#fab').addEventListener('click', openDrawer);
+$('#drawer-close').addEventListener('click', () => document.body.classList.remove('drawer-open'));
+
+// ---------- plan / paywall ----------
+function renderPlan() {
+  $('#plan-body').innerHTML = `<div class="grid g2" style="align-items:start"><div class="card"><h2>Your plan: ${S.plan === 'pro' ? 'Pro' : 'Free'}</h2><p class="muted">Writing a post uses 1 credit; changing one is free. Credits reset on the 1st.</p><div class="table-wrap"><table>
+    <tr><th></th><th>Free</th><th>Pro</th></tr>
+    <tr><td>Price</td><td>$0</td><td><b>$29</b>/month or $24/month yearly</td></tr>
+    <tr><td>Posts per month</td><td>10</td><td>300 + $9 for 200 more</td></tr>
+    <tr><td>Tracked links and codes</td><td>Yes</td><td>Yes</td></tr>
+    <tr><td>Results</td><td>Latest post only</td><td>Every post, ranked</td></tr>
+    <tr><td>Weekly review</td><td>–</td><td>Yes</td></tr></table></div>
+    <div style="margin-top:14px">${S.plan === 'pro' ? '<span class="pill good">You are on Pro</span>' : '<button class="btn primary" onclick="paywall(\'manual\')">Upgrade to Pro</button>'}</div></div>
+    <div class="card"><h3>Connected accounts</h3><div class="account"><b>Shopify</b><span class="muted">Juniper &amp; Clay · 6 products</span><span class="pill good">connected</span></div><div class="account"><b>Instagram</b><span class="muted">@juniperandclay</span><span class="pill good">connected</span></div><div class="account"><b>TikTok</b><span class="muted">@juniperandclay</span><span class="pill good">connected</span></div><p class="small faint" style="margin-top:10px">Lumi never posts for you; you post, then tell Lumi.</p></div></div>`;
+}
+function paywall(trigger) {
+  $('#pw-title').textContent = { quota: `You've used all ${LIMIT.free} free posts this month`, feature: 'See which posts actually sell', manual: 'Upgrade to Lumi Pro' }[trigger];
+  $('#pw-sub').textContent = trigger === 'quota' ? 'Your credits reset on the 1st. Or keep going now with Pro.' : 'Free shows results for your latest post. Pro shows all of them, ranked by orders.';
+  $('#paywall').classList.add('open');
+}
+document.addEventListener('click', (e) => {
+  if (e.target.matches('[data-close]')) e.target.closest('.modal-bg').classList.remove('open');
+  if (e.target.matches('[data-upgrade]')) { $('#paywall').classList.remove('open'); S.plan = 'pro'; S.left = 300 - S.gens; render(); toast('Welcome to Pro. Payment simulated.'); }
+  if (e.target.dataset.go) go(e.target.dataset.go);
+  if (e.target.closest('[data-tab]')) tab(e.target.closest('[data-tab]').dataset.tab);
+  if (e.target.dataset.plan) { S.plan = e.target.dataset.plan; S.left = S.plan === 'pro' ? 300 : 3; render(); }
+});
+function toast(t) { let el = document.querySelector('.toast'); if (!el) { el = document.createElement('div'); el.className = 'toast'; document.body.appendChild(el); } el.textContent = t; el.classList.add('show'); setTimeout(() => el.classList.remove('show'), 2200); }
+$('#pc-use').addEventListener('click', () => { S.left = 0; render(); toast('Credits used up. Try writing a post.'); });
+$('#pc-metrics').addEventListener('click', () => { go('app'); S.tab = 'metrics'; render(); });
+$('#pc-reset').addEventListener('click', () => { Object.assign(S, { plan: 'free', left: 3, tab: 'home', gens: 0, posted: false }); Object.assign(S.wiz, { step: 1, product: 'p6', channel: 'tiktok', angle: 'behind_the_scenes', post: null, variant: null, published: false }); resetChat(); go('landing'); });
+
+resetChat();
+const start = location.hash.slice(1);
+if (['home', 'write', 'results', 'plan', 'metrics'].includes(start)) { S.tab = start; go('app'); } else go('landing');
+</script>
+</body>
+</html>

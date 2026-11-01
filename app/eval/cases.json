@@ -1,0 +1,44 @@
+[
+  { "id": "perf-top-post", "prompt": "Which post brought the most orders?", "expect_any": ["get_results_summary", "get_post"], "forbid": ["generate_post"] },
+  { "id": "perf-what-works", "prompt": "What kind of posts work best for my shop?", "expect_all": ["get_results_summary"], "forbid": ["generate_post"] },
+  { "id": "perf-channels", "prompt": "Compare Instagram and TikTok for me. Where should I spend more time?", "expect_all": ["get_results_summary"], "forbid": ["generate_post"] },
+  { "id": "perf-discounts", "prompt": "Did my discount posts actually work?", "expect_any": ["get_results_summary", "get_post"], "forbid": ["generate_post"] },
+  { "id": "perf-products", "prompt": "Which product sells best from my posts?", "expect_all": ["get_results_summary"], "forbid": ["generate_post"] },
+  { "id": "perf-next-week", "prompt": "What should I post next week?", "expect_any": ["get_results_summary", "propose_post"], "forbid": ["generate_post"] },
+  { "id": "free-plan-results", "plan": "free", "prompt": "How did my posts do this month?", "expect_all": ["get_results_summary"], "forbid": ["generate_post"] },
+  { "id": "product-price", "prompt": "How much is the pour-over set and how many are left?", "expect_none": true },
+  { "id": "product-gift-price", "prompt": "Remind me what the Holiday Gift Box costs.", "expect_none": true },
+  { "id": "reviews-love", "prompt": "What do customers love about the bud vase?", "expect_all": ["find_reviews"], "forbid": ["generate_post"] },
+  { "id": "reviews-complaints", "prompt": "Any complaints in my reviews I should know about?", "expect_all": ["find_reviews"], "forbid": ["generate_post"] },
+  { "id": "write-ig-gift", "prompt": "Write an Instagram post for the Holiday Gift Box.", "expect_all": ["propose_post"], "forbid": ["generate_post"] },
+  { "id": "write-with-data", "prompt": "Draft a TikTok caption for the ocean bowls using the style that worked best for us.", "expect_all": ["propose_post"], "forbid": ["generate_post"] },
+  { "id": "write-unspecified", "prompt": "Write me a new post.", "expect_all": ["propose_post"], "forbid": ["generate_post"] },
+  { "id": "zh-write-unspecified", "prompt": "帮我写新的帖子", "expect_all": ["propose_post"], "forbid": ["generate_post"], "expect_language": "zh" },
+  { "id": "write-delegated", "prompt": "Write me an Instagram post about whatever has been selling best, you pick.", "expect_all": ["propose_post"], "forbid": ["generate_post"] },
+  { "id": "write-review-quote", "prompt": "Write a post about our mug that uses a real customer quote.", "expect_all": ["propose_post"], "forbid": ["generate_post"] },
+  { "id": "link-bio", "prompt": "I need a link for my Instagram bio that points to the planter.", "expect_all": ["create_tracked_link"], "forbid": ["generate_post"] },
+  { "id": "link-newsletter", "prompt": "Give me a discount code I can put in my email newsletter for the coffee set.", "expect_all": ["create_tracked_link"], "forbid": ["generate_post"] },
+  { "id": "multi-link-and-perf", "prompt": "Make me a tracked link for the gift box on TikTok, and tell me how my gift posts have done.", "expect_all": ["create_tracked_link", "get_results_summary"], "forbid": ["generate_post"] },
+  { "id": "smalltalk", "prompt": "Hi! Who are you?", "expect_none": true },
+  { "id": "off-topic", "prompt": "What's the capital of France?", "expect_none": true },
+  { "id": "zh-perf", "prompt": "上个月哪篇贴文带来的订单最多？为什么？", "expect_any": ["get_results_summary", "get_post"], "forbid": ["generate_post"], "expect_language": "zh" },
+  { "id": "zh-write", "prompt": "帮我给迷你花瓶写一篇 TikTok 文案。", "expect_all": ["propose_post"], "forbid": ["generate_post"], "expect_language": "zh" },
+  { "id": "flow-accept-edit", "turns": [
+    { "say": "Write a TikTok post for the ocean bowls.", "expect_all": ["propose_post"], "forbid": ["generate_post"] },
+    { "press_button": true, "say": "Yes, write it.", "expect_all": ["generate_post"] },
+    { "say": "Make version 1 shorter and warmer.", "expect_all": ["revise_post"], "forbid": ["generate_post"] }
+  ] },
+  { "id": "zh-flow-accept-edit", "expect_language": "zh", "turns": [
+    { "say": "帮我写一篇推广节日礼盒的 Instagram 帖子", "expect_all": ["propose_post"], "forbid": ["generate_post"] },
+    { "press_button": true, "say": "Yes, write it.", "expect_all": ["generate_post"] },
+    { "say": "第二版短一点", "expect_all": ["revise_post"], "forbid": ["generate_post"] }
+  ] },
+  { "id": "flow-change-product", "turns": [
+    { "say": "Write me a new post.", "expect_all": ["propose_post"], "forbid": ["generate_post"] },
+    { "say": "Not that one. Do the speckled mug instead.", "expect_all": ["propose_post"], "forbid": ["generate_post"] }
+  ] },
+  { "id": "flow-typed-yes", "turns": [
+    { "say": "Write me a new post.", "expect_all": ["propose_post"], "forbid": ["generate_post"] },
+    { "say": "yes go ahead and write it" }
+  ] }
+]

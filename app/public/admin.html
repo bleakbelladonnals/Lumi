@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lumi – Internal metrics</title>
+  <link rel="stylesheet" href="/style.css">
+  <style>
+    .metric .value { font-size: 30px; font-weight: 750; letter-spacing: -.02em; }
+    .target { font-size: 13px; color: var(--muted); }
+    .evt td { font-size: 12.5px; }
+  </style>
+</head>
+<body>
+  <div class="topbar"><div class="inner">
+    <a class="logo" href="/app"><span class="dot"></span>Lumi</a>
+    <span class="pill">Internal · product metrics</span>
+    <span style="flex:1"></span>
+    <label class="row small" style="margin:0; font-weight:500"><input type="checkbox" id="auto" checked style="width:auto"> Auto-refresh</label>
+    <button class="btn sm" id="reload">Refresh</button>
+  </div></div>
+
+  <div class="wrap stack">
+    <section>
+      <h2>Is v2 working? The three monthly numbers</h2>
+      <p class="muted small">One number decides each month (Part A, A4). Live values come from the events recorded by this app.</p>
+      <div class="grid g3" id="a4"></div>
+    </section>
+
+    <section>
+      <h3>Leading indicators and stop signals</h3>
+      <div class="grid g3" id="leading"></div>
+    </section>
+
+    <section class="grid g2" style="align-items:start">
+      <div class="card">
+        <h3>Funnel by first-touch source</h3>
+        <p class="small muted">Source is captured on the landing page and bound to the account at sign-up, so every later event joins on user_id.</p>
+        <div class="table-wrap" id="funnel"></div>
+      </div>
+      <div class="card">
+        <div class="row spread"><h3 style="margin:0">Attribution check: ad platform vs our backend</h3><button class="btn sm" id="case">Load case data (last month)</button></div>
+        <p class="small muted">Budget decisions use our backend count. The platform number is only used to optimize creatives inside the platform.</p>
+        <div id="recon"></div>
+      </div>
+    </section>
+
+    <section class="grid g2" style="align-items:start">
+      <div class="card">
+        <h3>Agent tool calls</h3>
+        <p class="small muted">Which tools the model chose, across all chats.</p>
+        <div id="tools"></div>
+        <h3 style="margin-top:16px">Totals</h3>
+        <div id="totals" class="small"></div>
+      </div>
+      <div class="card">
+        <h3>Conversion postbacks (TikTok Events API)</h3>
+        <p class="small muted">Built on the server when the payment webhook confirms a subscription. Simulated: recorded here, not sent. <code>event_id</code> matches <code>subscription_started</code> so the platform can de-duplicate against the pixel.</p>
+        <div id="outbox"></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="row spread"><h3 style="margin:0">Event stream</h3>
+        <select id="filter" style="width:auto"><option value="">All events</option></select></div>
+      <div class="table-wrap" id="events" style="margin-top:8px"></div>
+    </section>
+  </div>
+
+  <script src="/lumi.js"></script>
+  <script>
+    const { api, esc, money } = Lumi;
+    const $ = (s) => document.querySelector(s);
+    let reconCase = null;
+
+    const status = (v, target, higherBetter = true) => {
+      if (v == null) return '<span class="pill">no data yet</span>';
+      const ok = higherBetter ? v >= target : v <= target;
+      return `<span class="pill ${ok ? 'good' : 'warn'}">${ok ? 'on target' : 'below target'}</span>`;
+    };
+    const pctText = (v) => (v == null ? '–' : v + '%');
+
+    function metricCard(title, valueHtml, sub, pill) {
+      return `<div class="card metric"><div class="row spread"><span class="small muted" style="font-weight:600">${title}</span>${pill || ''}</div><div class="value">${valueHtml}</div><div class="target">${sub}</div></div>`;
+    }
+
+    async function load() {
+      const m = await api('/api/admin/metrics');
+      const a = m.a4;
+      $('#a4').innerHTML = [
+        metricCard('Month 1 · ' + a.month1.label, pctText(a.month1.value_pct), `Target ≥ ${a.month1.target_pct}% · ${a.month1.numerator}/${a.month1.denominator} Pro users · ${a.month1.note}`, status(a.month1.value_pct, a.month1.target_pct)),
+        metricCard('Month 2 · ' + a.month2.label, a.month2.value, `Target ≥ ${a.month2.target} new paid users from v2`, status(a.month2.value, a.month2.target)),
+        metricCard('Month 3 · ' + a.month3.label, pctText(a.month3.value_pct), a.month3.matured ? `Target ≥ ${a.month3.target_pct}% (baseline ${a.month3.baseline_pct}%) · ${a.month3.retained}/${a.month3.matured} matured subscriptions` : `Target ≥ ${a.month3.target_pct}% (baseline ${a.month3.baseline_pct}%) · no cohort is 30 days old yet (${a.month3.total_subscriptions} subscriptions so far)`, status(a.month3.value_pct, a.month3.target_pct)),
+      ].join('');
+      const l = m.leading;
+      $('#leading').innerHTML = [
+        metricCard(l.weekly_results_open_rate.label, pctText(l.weekly_results_open_rate.value_pct), `${l.weekly_results_open_rate.numerator}/${l.weekly_results_open_rate.denominator} · stop adding features and go back to interviews if below ${l.weekly_results_open_rate.stop_below_pct}% at the end of month 2`, l.weekly_results_open_rate.value_pct == null ? '' : l.weekly_results_open_rate.value_pct < 30 ? '<span class="pill bad">stop signal</span>' : '<span class="pill good">healthy</span>'),
+        metricCard(l.paywall_conversion.label, pctText(l.paywall_conversion.value_pct), `${l.paywall_conversion.numerator}/${l.paywall_conversion.denominator} · roll the price back if $29 converts 40% worse than $19 did`),
+        metricCard(l.generation_success.label, pctText(l.generation_success.value_pct), `${l.generation_success.numerator}/${l.generation_success.denominator} · failed generations are refunded`),
+      ].join('');
+
+      $('#funnel').innerHTML = m.funnel.length
+        ? `<table><tr><th>Source</th><th class="num">Landing visitors</th><th class="num">Sign-ups</th><th class="num">Wrote a post</th><th class="num">Paid</th><th class="num">Sign-up → paid</th></tr>${m.funnel.map((r) => `<tr><td>${esc(r.source)}</td><td class="num">${r.landing_visitors}</td><td class="num">${r.sign_ups}</td><td class="num">${r.activated}</td><td class="num">${r.paid}</td><td class="num">${r.signup_to_paid_pct == null ? '–' : r.signup_to_paid_pct + '%'}</td></tr>`).join('')}</table>`
+        : '<p class="muted small">No data yet. Visit the landing page with UTM parameters and sign up.</p>';
+
+      renderRecon(m.reconciliation);
+
+      $('#tools').innerHTML = m.tools.length
+        ? `<table><tr><th>Tool</th><th class="num">Calls</th><th class="num">Errors</th></tr>${m.tools.map((t) => `<tr><td><code>${esc(t.tool)}</code></td><td class="num">${t.calls}</td><td class="num">${t.errors}</td></tr>`).join('')}</table>`
+        : '<p class="muted small">No tool calls yet.</p>';
+      const t = m.totals;
+      $('#totals').innerHTML = `${t.users} users (${t.pro_users} Pro) · ${t.posts} posts · ${t.tracked_links} tracked links · ${t.unique_clicks} unique clicks (${t.bot_clicks} bot clicks ignored) · ${t.attributed_orders} attributed orders · ${money(t.attributed_revenue)} attributed revenue`;
+      $('#outbox').innerHTML = m.outbox.length
+        ? m.outbox.map((o) => `<pre class="mono small" style="background:#fbfaf8; border:1px solid var(--line); border-radius:8px; padding:10px; white-space:pre-wrap">${esc(JSON.stringify(o.payload, null, 2))}</pre>`).join('')
+        : '<p class="muted small">Nothing yet. Sign up from a TikTok-tagged landing URL, then upgrade to Pro.</p>';
+
+      const ev = await api('/api/admin/events?limit=200');
+      const names = [...new Set(ev.events.map((e) => e.name))].sort();
+      const f = $('#filter');
+      const cur = f.value;
+      f.innerHTML = '<option value="">All events</option>' + names.map((n) => `<option ${n === cur ? 'selected' : ''}>${n}</option>`).join('');
+      const rows = ev.events.filter((e) => !cur || e.name === cur).slice(0, 120);
+      $('#events').innerHTML = `<table class="evt"><tr><th>Time (UTC)</th><th>Event</th><th>From</th><th>Properties</th></tr>${rows.map((e) => {
+        const { name, ts, source, event_id, ...props } = e;
+        const kv = Object.entries(props).filter(([, v]) => v !== null && v !== undefined).map(([k, v]) => `<span class="faint">${esc(k)}=</span>${esc(typeof v === 'object' ? JSON.stringify(v) : v)}`).join('  ');
+        return `<tr><td class="mono">${ts.slice(11, 19)}</td><td><code>${esc(name)}</code></td><td><span class="pill ${source === 'server' ? 'accent' : ''}">${source}</span></td><td class="mono">${kv}</td></tr>`;
+      }).join('')}</table>`;
+    }
+
+    function renderRecon(r) {
+      const d = reconCase || {
+        label: `Live demo data, last ${r.window_days} days`,
+        platform: Number($('#platform')?.value) || 0,
+        tiktok: r.backend_by_source.tiktok || 0,
+        unknown: r.backend_by_source.unknown || 0,
+        total: r.backend_total,
+      };
+      const maxExplainable = d.tiktok + d.unknown;
+      const gap = d.platform - d.tiktok;
+      $('#recon').innerHTML = `
+        <div class="small muted" style="margin-bottom:6px">${esc(d.label)}</div>
+        <table>
+          <tr><td>TikTok Ads Manager reports</td><td class="num"><input id="platform" type="number" min="0" value="${d.platform}" style="width:90px; text-align:right; padding:4px 8px"></td></tr>
+          <tr><td>Our backend: paid users with TikTok as source</td><td class="num"><b>${d.tiktok}</b></td></tr>
+          <tr><td>Our backend: paid users with unknown source</td><td class="num">${d.unknown}</td></tr>
+          <tr><td>Our backend: all paid users</td><td class="num">${d.total}</td></tr>
+        </table>
+        <div class="small" style="margin-top:10px">
+          ${d.platform ? `<p>Gap: platform claims <b>${gap}</b> more than our backend (${d.tiktok ? Math.round((gap / d.tiktok) * 100) : '–'}%).</p>
+          <p>Even if every unknown-source payer came from TikTok, the most TikTok could have is ${d.tiktok} + ${d.unknown} = <b>${maxExplainable}</b>${d.platform > maxExplainable ? `, still below ${d.platform}. At least ${d.platform - maxExplainable} conversions are double-claimed (view-through, 7-day window, other channels' users) or counted differently` : ''}.</p>
+          <p><b>Number to budget with:</b> ${d.tiktok} to ${maxExplainable} paid users (backend count, plus at most the unknowns), then judged on 30-day retention and LTV/CAC.</p>` : '<p class="muted">Enter the number the ad platform reports to compare.</p>'}
+        </div>`;
+      $('#platform').addEventListener('change', () => { if (reconCase) reconCase.platform = Number($('#platform').value) || 0; renderRecon(r); });
+    }
+
+    $('#case').addEventListener('click', () => {
+      reconCase = reconCase ? null : { label: 'Case data from the brief (Data 4, last month)', platform: 162, tiktok: 118, unknown: 31, total: 185 };
+      $('#case').textContent = reconCase ? 'Back to live data' : 'Load case data (last month)';
+      load();
+    });
+    $('#reload').addEventListener('click', load);
+    $('#filter').addEventListener('change', load);
+    setInterval(() => { if ($('#auto').checked && !document.hidden && document.activeElement?.id !== 'platform') load(); }, 4000);
+    load();
+  </script>
+</body>
+</html>

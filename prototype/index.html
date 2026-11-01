@@ -1,0 +1,690 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lumi v2 – Clickable prototype</title>
+<style>
+:root {
+  --bg: #f7f6f3;
+  --panel: #ffffff;
+  --ink: #1d1b18;
+  --muted: #6b665d;
+  --faint: #9a948a;
+  --line: #e7e3da;
+  --accent: #5a48d6;
+  --accent-ink: #ffffff;
+  --accent-soft: #efecfd;
+  --good: #1d8457;
+  --good-soft: #e5f4ec;
+  --bad: #b9382c;
+  --bad-soft: #fbeae8;
+  --warn: #a8670c;
+  --warn-soft: #fbf1df;
+  --radius: 12px;
+  --shadow: 0 1px 2px rgba(29, 27, 24, .05), 0 4px 16px rgba(29, 27, 24, .04);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  color: var(--ink);
+  background: var(--bg);
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); font-size: 15px; line-height: 1.5; }
+a { color: var(--accent); }
+h1, h2, h3 { line-height: 1.2; margin: 0 0 .4em; }
+h1 { font-size: 40px; letter-spacing: -.02em; }
+h2 { font-size: 22px; letter-spacing: -.01em; }
+h3 { font-size: 16px; }
+p { margin: 0 0 .8em; }
+code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; }
+.muted { color: var(--muted); }
+.faint { color: var(--faint); }
+.small { font-size: 13px; }
+.row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.spread { justify-content: space-between; }
+.stack > * + * { margin-top: 12px; }
+.grid { display: grid; gap: 16px; }
+.g2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.g3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.g4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.side-r { grid-template-columns: minmax(0, 1fr) 280px; }
+.side-r-wide { grid-template-columns: minmax(0, 1fr) 340px; }
+.side-l { grid-template-columns: 360px minmax(0, 1fr); }
+@media (max-width: 860px) {
+  .g2, .g3, .g4, .side-r, .side-r-wide, .side-l { grid-template-columns: minmax(0, 1fr); }
+  h1 { font-size: 30px; }
+  .topbar .inner { flex-wrap: wrap; gap: 8px 12px; padding: 10px 16px; }
+  .topbar .tabs { order: 3; width: 100%; overflow-x: auto; }
+  .wrap { padding: 16px 16px 48px; }
+  .chat { height: auto; min-height: 0; }
+  .msgs { max-height: 60vh; }
+}
+
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; box-shadow: var(--shadow); }
+.card.tight { padding: 12px 14px; }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 9px; padding: 9px 14px; font: inherit; font-weight: 600; cursor: pointer; text-decoration: none; }
+.btn:hover { border-color: #cfc9bd; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.btn.primary:hover { filter: brightness(1.06); }
+.btn.ghost { background: transparent; }
+.btn.sm { padding: 5px 10px; font-size: 13px; border-radius: 7px; }
+.btn:disabled { opacity: .55; cursor: not-allowed; }
+input, select, textarea { font: inherit; color: inherit; border: 1px solid var(--line); border-radius: 9px; padding: 9px 12px; background: var(--panel); width: 100%; }
+input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
+label { font-weight: 600; font-size: 13px; display: block; margin-bottom: 6px; }
+
+.pill { display: inline-flex; align-items: center; gap: 4px; padding: 2px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; background: #f0ede6; color: var(--muted); white-space: nowrap; }
+.pill.accent { background: var(--accent-soft); color: var(--accent); }
+.pill.good { background: var(--good-soft); color: var(--good); }
+.pill.bad { background: var(--bad-soft); color: var(--bad); }
+.pill.warn { background: var(--warn-soft); color: var(--warn); }
+
+table { width: 100%; border-collapse: collapse; }
+td.date { white-space: nowrap; }
+th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-size: 12px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .03em; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.table-wrap { overflow-x: auto; }
+
+.topbar { position: sticky; top: 0; z-index: 10; background: rgba(247, 246, 243, .92); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); }
+.topbar .inner { max-width: 1160px; margin: 0 auto; padding: 12px 20px; display: flex; align-items: center; gap: 16px; }
+.logo { font-weight: 800; font-size: 20px; letter-spacing: -.02em; display: flex; align-items: center; gap: 8px; color: var(--ink); text-decoration: none; }
+.logo .dot { width: 22px; height: 22px; border-radius: 7px; background: linear-gradient(135deg, var(--accent), #9b8cf5); display: inline-block; }
+.wrap { max-width: 1160px; margin: 0 auto; padding: 24px 20px 60px; }
+.tabs { display: flex; gap: 4px; }
+.tab { padding: 8px 12px; border-radius: 8px; font-weight: 600; color: var(--muted); cursor: pointer; border: 0; background: none; font: inherit; font-weight: 600; }
+.tab.active { background: var(--panel); color: var(--ink); box-shadow: var(--shadow); }
+.meter { width: 120px; height: 6px; background: #ebe7df; border-radius: 99px; overflow: hidden; }
+.meter > span { display: block; height: 100%; background: var(--accent); }
+.meter.low > span { background: var(--bad); }
+
+.tile .label { font-size: 12px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .03em; }
+.tile .value { font-size: 28px; font-weight: 750; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+
+/* chat */
+.chat { display: grid; grid-template-rows: 1fr auto; height: calc(100vh - 190px); min-height: 520px; }
+.msgs { overflow-y: auto; padding: 4px 4px 16px; }
+.msg { margin: 14px 0; max-width: 820px; }
+.msg.user { margin-left: auto; background: var(--accent); color: #fff; padding: 10px 14px; border-radius: 14px 14px 4px 14px; width: fit-content; max-width: 70%; }
+.msg.bot .text p:last-child { margin-bottom: 0; }
+.msg.bot .text ul, .msg.bot .text ol { margin: 0 0 .8em; padding-left: 20px; }
+.step { border: 1px solid var(--line); border-radius: 10px; background: #fbfaf8; margin: 8px 0; font-size: 13px; }
+.step summary { padding: 7px 12px; cursor: pointer; display: flex; gap: 8px; align-items: center; list-style: none; }
+.step summary::-webkit-details-marker { display: none; }
+.step pre { margin: 0; padding: 10px 12px; border-top: 1px solid var(--line); max-height: 260px; overflow: auto; white-space: pre-wrap; word-break: break-word; }
+.step-body { border-top: 1px solid var(--line); }
+.step-body > div { padding: 10px 12px 2px; }
+.step-body > div > .card { box-shadow: none; }
+.step summary code { margin-left: auto; }
+.spinner { width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--line); border-top-color: var(--accent); animation: spin .8s linear infinite; display: inline-block; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.composer { display: flex; gap: 8px; padding-top: 10px; border-top: 1px solid var(--line); }
+.composer textarea { resize: none; height: 46px; }
+.chips { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0; }
+.chip { border: 1px solid var(--line); background: var(--panel); border-radius: 999px; padding: 6px 12px; font-size: 13px; cursor: pointer; font: inherit; font-size: 13px; }
+.chip:hover { border-color: var(--accent); color: var(--accent); }
+
+.variant { border: 1px solid var(--line); border-radius: 10px; padding: 12px; background: var(--panel); display: flex; flex-direction: column; gap: 8px; }
+.variant .caption { white-space: pre-wrap; font-size: 14px; }
+.variant.chosen { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+.trackbox { background: var(--accent-soft); border-radius: 8px; padding: 8px 10px; font-size: 13px; }
+
+.choice { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; cursor: pointer; background: var(--panel); text-align: left; font: inherit; width: 100%; }
+.choice.on { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+
+.locked-row td { filter: blur(4px); user-select: none; }
+.lock-overlay { position: relative; overflow: hidden; min-height: 240px; }
+.lock-cta { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+
+.modal-bg { position: fixed; inset: 0; background: rgba(20, 18, 15, .45); display: none; align-items: center; justify-content: center; z-index: 50; padding: 16px; }
+.modal-bg.open { display: flex; }
+.modal { background: var(--panel); border-radius: 16px; max-width: 520px; width: 100%; padding: 24px; box-shadow: 0 20px 60px rgba(0, 0, 0, .2); max-height: 90vh; overflow: auto; }
+.bar { height: 8px; border-radius: 99px; background: var(--accent); }
+.bar-track { background: #efebe3; border-radius: 99px; overflow: hidden; }
+.toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--ink); color: #fff; padding: 10px 16px; border-radius: 10px; font-size: 14px; z-index: 60; opacity: 0; transition: opacity .2s; pointer-events: none; }
+.toast.show { opacity: 1; }
+.banner { background: var(--warn-soft); color: var(--warn); border-radius: 10px; padding: 10px 14px; font-size: 14px; }
+
+/* ---------- v2 merchant layout ---------- */
+.btn.xs { padding: 3px 8px; font-size: 12px; border-radius: 6px; }
+.label { font-size: 12px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .03em; }
+
+/* demo controls: reviewer-only strip, visually separate from the product */
+.demobar { background: #2a2722; color: #e9e5dc; font-size: 12px; }
+.demobar .inner { max-width: 1160px; margin: 0 auto; padding: 6px 20px; display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: center; }
+.demobar a { color: #c9c0ff; }
+.demobar .btn { background: #3a362f; color: #e9e5dc; border-color: #4a453c; }
+.demobar .mono { font-size: 12px; color: #fff; }
+.demo-toggle { position: fixed; left: 12px; bottom: 12px; z-index: 30; background: #2a2722; color: #e9e5dc; border: 0; border-radius: 999px; padding: 6px 12px; font: inherit; font-size: 12px; cursor: pointer; opacity: .8; }
+.demo-hint { background: #f0ede6; border: 1px dashed #cfc9bd; border-radius: 8px; padding: 8px 10px; margin-top: 14px; }
+
+/* home */
+.headline-card { background: var(--accent-soft); border: 0; box-shadow: none; }
+.headline { font-size: 19px; line-height: 1.45; margin: 0 0 8px; }
+.how summary { cursor: pointer; color: var(--accent); list-style: none; }
+.how summary::-webkit-details-marker { display: none; }
+.how p { margin: 6px 0 0; color: var(--muted); }
+.tile .pill { margin-top: 4px; }
+.findings { margin: 8px 0 12px; padding-left: 18px; }
+.findings li { margin: 4px 0; }
+.quote { font-size: 14px; margin: 8px 0; padding-left: 10px; border-left: 3px solid var(--line); }
+.next-card { border-color: var(--accent); }
+.checklist { margin: 0; padding-left: 0; list-style: none; counter-reset: c; }
+.checklist li { counter-increment: c; display: flex; gap: 10px; align-items: center; padding: 6px 0; font-size: 14px; }
+.checklist li::before { content: counter(c); width: 22px; height: 22px; border-radius: 50%; border: 1px solid var(--line); display: inline-flex; align-items: center; justify-content: center; font-size: 12px; color: var(--muted); flex: none; }
+.checklist li.done { color: var(--muted); text-decoration: line-through; }
+.checklist li.done::before { content: "✓"; background: var(--good); border-color: var(--good); color: #fff; }
+.lock-teaser { display: flex; gap: 14px; align-items: flex-start; }
+.lock-icon { font-size: 22px; }
+
+/* write flow */
+.stepper { display: flex; gap: 8px; list-style: none; padding: 0; margin: 0 0 16px; flex-wrap: wrap; }
+.stepper li { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; color: var(--faint); padding: 6px 12px 6px 6px; border-radius: 999px; }
+.stepper li span { width: 24px; height: 24px; border-radius: 50%; border: 1px solid var(--line); display: inline-flex; align-items: center; justify-content: center; font-size: 12px; background: var(--panel); }
+.stepper li.current { color: var(--ink); background: var(--panel); box-shadow: var(--shadow); }
+.stepper li.current span { background: var(--accent); border-color: var(--accent); color: #fff; }
+.stepper li.done { color: var(--muted); }
+.stepper li.done span { background: var(--good); border-color: var(--good); color: #fff; }
+.wiz-card { max-width: 720px; }
+.wiz-actions { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 18px; flex-wrap: wrap; }
+.choice.inline { width: auto; }
+.suggest { margin-top: 6px; color: var(--ink); }
+.post-steps { padding-left: 20px; margin: 0; }
+.post-steps > li { margin: 0 0 16px; }
+.caption-box { white-space: pre-wrap; background: #fbfaf8; border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin: 8px 0; font-size: 14px; }
+.link-box { background: var(--accent-soft); border-radius: 6px; padding: 6px 8px; word-break: break-all; }
+.done-card h2 { color: var(--good); }
+
+/* plan */
+.account { display: flex; gap: 10px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+.account .muted { flex: 1; }
+
+/* assistant drawer */
+.fab { position: fixed; right: 20px; bottom: 20px; z-index: 30; display: inline-flex; align-items: center; gap: 8px; background: var(--ink); color: #fff; border: 0; border-radius: 999px; padding: 12px 18px; font: inherit; font-weight: 700; cursor: pointer; box-shadow: 0 8px 24px rgba(0, 0, 0, .18); }
+.fab .dot { width: 14px; height: 14px; border-radius: 5px; background: linear-gradient(135deg, var(--accent), #9b8cf5); }
+.drawer { position: fixed; top: 0; right: 0; bottom: 0; width: var(--drawer-w, 420px); max-width: 100%; background: var(--panel); border-left: 1px solid var(--line); z-index: 40; display: grid; grid-template-rows: auto 1fr auto; transform: translateX(100%); transition: transform .2s ease; box-shadow: -8px 0 32px rgba(0, 0, 0, .06); }
+.drawer-open .drawer { transform: none; }
+.drawer-open .fab { display: none; }
+.drawer-head { display: flex; align-items: center; gap: 6px; padding: 12px 14px; border-bottom: 1px solid var(--line); }
+.drawer .msgs { padding: 4px 14px 16px; }
+.drawer .msg.user { max-width: 85%; }
+.drawer-foot { padding: 0 14px 14px; }
+.drawer .chips { margin: 8px 0; }
+.proposal { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+/* On wide and medium screens the page makes room for the assistant instead of sitting under it. */
+@media (min-width: 900px) { .drawer-open { padding-right: var(--drawer-w, 420px); } }
+@media (min-width: 900px) and (max-width: 1279px) { :root { --drawer-w: 360px; } }
+
+/* results table turns into cards on phones */
+@media (max-width: 860px) {
+  table.posts thead { display: none; }
+  table.posts, table.posts tbody, table.posts tr, table.posts td { display: block; width: 100%; }
+  table.posts tr { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; margin-bottom: 10px; }
+  table.posts td { border: 0; padding: 3px 0; text-align: left; }
+  table.posts td[data-label] { display: flex; justify-content: space-between; }
+  table.posts td[data-label]::before { content: attr(data-label); color: var(--muted); font-size: 12px; }
+  .fab { right: 16px; bottom: 16px; }
+  .headline { font-size: 17px; }
+}
+@media (max-width: 899px) { :root { --drawer-w: 100%; } }
+.topbar .inner > .row { flex-wrap: nowrap; }
+@media (max-width: 1279px) { .drawer-open .topbar .meter { display: none; } .drawer-open .topbar .inner { gap: 10px; } }
+
+.proto-bar { background: #1d1b18; color: #f3f1ec; font-size: 13px; }
+.proto-bar .inner { max-width: 1160px; margin: 0 auto; padding: 8px 20px; display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+.proto-bar button { background: #34312c; color: #f3f1ec; border: 1px solid #4a463f; border-radius: 6px; padding: 3px 9px; font: inherit; cursor: pointer; }
+.proto-bar button.on { background: var(--accent); border-color: var(--accent); }
+.page { display: none; }
+.page.on { display: block; }
+.hero { display: grid; grid-template-columns: 1.15fr .85fr; gap: 40px; align-items: center; padding: 48px 0 28px; }
+@media (max-width: 860px) { .hero { grid-template-columns: 1fr; } }
+.hero h1 span { color: var(--accent); }
+.flow { display: flex; gap: 8px; flex-wrap: wrap; font-size: 12px; }
+.flow span { background: #fff; border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px; }
+.typing::after { content: '▋'; animation: blink 1s steps(1) infinite; color: var(--accent); }
+@keyframes blink { 50% { opacity: 0; } }
+</style>
+</head>
+<body>
+<div class="proto-bar"><div class="inner">
+  <b>Prototype controls</b>
+  <span>Plan:</span><button data-plan="free">Free</button><button data-plan="pro">Pro</button>
+  <span id="pc-credits"></span><button id="pc-use">Use up credits</button><button id="pc-metrics">Internal metrics</button><button id="pc-reset">Reset</button>
+  <span style="flex:1"></span>
+  <span class="faint">Hard-coded data and replies. The runnable version is in /app.</span>
+</div></div>
+
+<!-- ========== Landing ========== -->
+<div class="page" id="p-landing">
+  <div class="topbar"><div class="inner"><span class="logo"><span class="dot"></span>Lumi</span><span class="muted small">AI marketing assistant for small shops</span><span style="flex:1"></span><button class="btn sm" data-go="app">Sign in</button></div></div>
+  <div class="wrap">
+    <section class="hero">
+      <div>
+        <span class="pill accent">New in Lumi v2</span>
+        <h1 style="margin-top:12px">Know which posts <span>bring orders</span>. Lumi writes the next one.</h1>
+        <p class="muted" style="font-size:18px; max-width:520px">Every post Lumi writes comes with a tracked link and its own discount code. You see clicks, orders and revenue per post, and Lumi learns what works for your shop.</p>
+        <div class="row" style="max-width:480px; margin-top:18px"><input placeholder="you@yourshop.com" value="maya@juniperclay.com" style="flex:1; min-width:200px"><button class="btn primary" data-go="app">Start free</button></div>
+        <p class="small muted" style="margin-top:8px">Free: 10 posts a month, no card needed. Pro: $29/month.</p>
+        <div class="card tight small" style="margin-top:16px; max-width:520px">
+          <b>Captured from the ad click</b> <span class="pill">visible in prototype only</span>
+          <div class="mono muted" style="margin-top:6px">utm_source=tiktok · utm_medium=paid · utm_campaign=q4_smb · ttclid=E.C.P.demo123</div>
+          <div class="muted" style="margin-top:4px">Saved in a first-party cookie, bound to the account at sign-up, sent with sign_up and subscription_started.</div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="row spread"><h3 style="margin:0">Last 30 days</h3><span class="pill good">Best: behind the scenes</span></div>
+        <table style="margin-top:8px"><tr><th>Post</th><th class="num">Clicks</th><th class="num">Orders</th></tr>
+          <tr><td>Kiln opening, 60 seconds</td><td class="num">260</td><td class="num">9</td></tr>
+          <tr><td>Dipping bowls in ocean glaze</td><td class="num">198</td><td class="num">6</td></tr>
+          <tr><td>Gift box for the person who wants nothing</td><td class="num">92</td><td class="num">5</td></tr>
+          <tr><td>Planter sale, 20% off</td><td class="num">81</td><td class="num">1</td></tr></table>
+      </div>
+    </section>
+    <div class="flow"><span>1 · Ad click with UTM</span><span>2 · Sign up</span><span>3 · Home: how posts did + what to post next</span><span>4 · Write in 4 steps</span><span>5 · Code in caption, link in bio, "I've posted it"</span><span>6 · Customer orders</span><span>7 · Orders per post back on Home</span></div>
+  </div>
+</div>
+
+
+<!-- ========== App ========== -->
+<div class="page" id="p-app">
+  <div class="topbar"><div class="inner">
+    <span class="logo"><span class="dot"></span>Lumi</span>
+    <nav class="tabs" id="tabs">
+      <button class="tab" data-tab="home">Home</button>
+      <button class="tab" data-tab="write">Write</button>
+      <button class="tab" data-tab="results">Results</button>
+      <button class="tab" data-tab="plan">Plan</button>
+    </nav>
+    <span style="flex:1"></span>
+    <div class="row small" style="gap:10px"><span id="plan-pill" class="pill"></span><div class="row" style="gap:6px"><div class="meter" id="meter"><span></span></div><span id="credits" class="muted"></span></div><button class="btn sm ghost" data-go="landing">Sign out</button></div>
+  </div></div>
+  <div class="wrap">
+    <section class="tabp" id="t-home"></section>
+    <section class="tabp" id="t-write" hidden>
+      <ol class="stepper" id="stepper"><li data-s="1"><span>1</span>Product</li><li data-s="2"><span>2</span>Where and how</li><li data-s="3"><span>3</span>Pick a version</li><li data-s="4"><span>4</span>Post it</li></ol>
+      <div id="wizard"></div>
+    </section>
+    <section class="tabp" id="t-results" hidden><h2>Results</h2><div id="r-body"></div></section>
+    <section class="tabp" id="t-plan" hidden><div id="plan-body"></div></section>
+    <section class="tabp" id="t-metrics" hidden>
+      <div class="banner" style="margin-bottom:14px">Internal page for the team, not shown to merchants. Sample numbers for month 1 after launch.</div>
+      <h2>Is v2 working? One number per month</h2>
+      <p class="small muted">From Part A (A4). Each number is computed from the events in the PRD tracking plan.</p>
+      <div class="grid g3">
+        <div class="card"><div class="row spread"><span class="small muted"><b>Month 1</b> · seed Pro users who published a tracked post within 7 days</span><span class="pill good">on target</span></div><div class="tile"><div class="value">62%</div></div><div class="small muted">31 of 50 · target ≥ 50% · from tracked_link_created + first tracked_link_click</div></div>
+        <div class="card"><div class="row spread"><span class="small muted"><b>Month 2</b> · new paid users on v2</span><span class="pill">not started</span></div><div class="tile"><div class="value">–</div></div><div class="small muted">Target ≥ 100 · from subscription_started</div></div>
+        <div class="card"><div class="row spread"><span class="small muted"><b>Month 3</b> · 30-day paid retention</span><span class="pill">not started</span></div><div class="tile"><div class="value">–</div></div><div class="small muted">Target ≥ 45% (today about 26%) · from subscription_started and cancellations</div></div>
+      </div>
+      <h3 style="margin-top:20px">Leading indicators and stop signals</h3>
+      <div class="grid g3">
+        <div class="card"><span class="small muted">Pro users who opened Results this week</span><div class="tile"><div class="value">48%</div></div><div class="small muted">Stop adding features if below 30% at the end of month 2 · from report_viewed</div></div>
+        <div class="card"><span class="small muted">Paywall → paid at $29</span><div class="tile"><div class="value">4.1%</div></div><div class="small muted">$19 baseline 5.2%, so $29 converts at 79% of it (roll back below 60%) · from paywall_view</div></div>
+        <div class="card"><span class="small muted">Model cost per active user</span><div class="tile"><div class="value">$0.14</div></div><div class="small muted">Free on the cheaper model, was $0.35 · from post_generated</div></div>
+      </div>
+      <div class="grid g2" style="margin-top:16px; align-items:start">
+        <div class="card"><h3>Paid users by first-touch source</h3>
+          <table><tr><th>Source</th><th class="num">Sign-ups</th><th class="num">Paid</th><th class="num">Still paying at day 30</th></tr>
+          <tr><td>Email list</td><td class="num">410</td><td class="num">14</td><td class="num">–</td></tr>
+          <tr><td>Instagram (group accounts)</td><td class="num">620</td><td class="num">5</td><td class="num">–</td></tr>
+          <tr><td>TikTok ads</td><td class="num">1,950</td><td class="num">22</td><td class="num">–</td></tr>
+          <tr><td>Referral</td><td class="num">96</td><td class="num">3</td><td class="num">–</td></tr></table>
+        </div>
+        <div class="card"><h3>Attribution check (case data, last month)</h3>
+          <table><tr><td>TikTok Ads Manager reports</td><td class="num">162</td></tr><tr><td>Our backend, source = TikTok</td><td class="num"><b>118</b></td></tr><tr><td>Our backend, source unknown</td><td class="num">31</td></tr></table>
+          <p class="small" style="margin-top:8px">Even if all 31 unknowns came from TikTok, the most is 149, still below 162. Budget with <b>118 to 149</b>, judged on retention and LTV/CAC. The platform number is only for optimizing creatives.</p>
+        </div>
+      </div>
+    </section>
+  </div>
+  <button class="fab" id="fab"><span class="dot"></span>Ask Lumi</button>
+  <aside class="drawer" id="drawer">
+    <div class="drawer-head"><b>Lumi assistant</b><span style="flex:1"></span><button class="btn sm ghost" id="drawer-close">✕</button></div>
+    <div class="msgs" id="msgs"></div>
+    <div class="drawer-foot">
+      <div class="chips" id="chips"></div>
+      <div class="composer"><textarea placeholder="In the prototype, pick one of the suggestions above" disabled></textarea><button class="btn primary" disabled>Send</button></div>
+    </div>
+  </aside>
+</div>
+
+<!-- Paywall -->
+<div class="modal-bg" id="paywall"><div class="modal">
+  <div class="row spread"><span class="pill accent">Lumi Pro</span><button class="btn sm ghost" data-close>Close</button></div>
+  <h2 id="pw-title" style="margin-top:12px"></h2>
+  <p class="muted" id="pw-sub"></p>
+  <div class="card tight small" style="background:var(--accent-soft); border:0; box-shadow:none"><b>Your latest post</b> (Holiday Gift Box, Oct 27) got <b>150 clicks</b> and <b>4 orders</b> worth $256. 11 more posts have results waiting.</div>
+  <ul style="padding-left:18px; margin:16px 0"><li>Results for every post, ranked by orders and revenue</li><li>Weekly review: what sold and what to post next</li><li>300 posts a month (top up 200 more for $9)</li><li>Best model, no "Made with Lumi" badge</li></ul>
+  <div class="grid g2"><button class="btn primary" data-upgrade>$29 / month</button><button class="btn" data-upgrade>$24 / month, billed yearly</button></div>
+  <p class="small muted" style="margin:10px 0 0">Cancel anytime. Your tracked links keep working on Free.</p>
+</div></div>
+
+<script>
+const D = {"as_of": "2026-10-30", "merchant": {"name": "Juniper & Clay", "owner": "Maya", "category": "Handmade ceramics and home goods", "location": "Portland, Oregon, US", "store": "Shopify", "channels": ["instagram", "tiktok"], "monthly_revenue_usd": 12000, "brand_voice": "Warm, honest, a little playful. Talks like a maker, not a brand."}, "products": [{"id": "p1", "name": "Speckled Morning Mug", "price": 34, "stock": 120, "rating": 4.8, "review_count": 212, "selling_points": ["Keeps coffee hot longer (thick stoneware walls)", "Dishwasher and microwave safe", "Every glaze pattern is one of a kind"]}, {"id": "p2", "name": "Ocean Glaze Bowl Set (2)", "price": 58, "stock": 45, "rating": 4.7, "review_count": 96, "selling_points": ["Deep blue glaze that pools like seawater", "Right size for ramen or salads", "Stackable"]}, {"id": "p3", "name": "Mini Bud Vase", "price": 22, "stock": 200, "rating": 4.9, "review_count": 341, "selling_points": ["Fits one or two stems", "Easy gift under $25", "Comes in 5 glaze colors"]}, {"id": "p4", "name": "Pour-Over Coffee Set", "price": 89, "stock": 18, "rating": 4.6, "review_count": 54, "selling_points": ["Dripper, carafe and two cups", "Slow, even extraction", "Small batch, only 18 left"]}, {"id": "p5", "name": "Matte Planter (Medium)", "price": 46, "stock": 60, "rating": 4.5, "review_count": 77, "selling_points": ["Drainage hole and saucer included", "Unglazed matte finish", "Fits a 6 inch pot"]}, {"id": "p6", "name": "Holiday Gift Box (Mug + Candle)", "price": 64, "stock": 80, "rating": 4.8, "review_count": 38, "selling_points": ["Speckled mug plus a cedar candle poured into a ceramic cup", "Ships gift-wrapped with a handwritten note", "New for the 2026 holidays"]}], "reviews": [{"id": "r1", "product_id": "p1", "rating": 5, "date": "2026-10-20", "text": "My coffee actually stays warm through my first meeting. And mine has a little swirl no one else has."}, {"id": "r2", "product_id": "p1", "rating": 5, "date": "2026-10-11", "text": "Bought one, came back for three more as gifts. Heavy in the best way."}, {"id": "r3", "product_id": "p1", "rating": 4, "date": "2026-09-28", "text": "Love it, but it is bigger than I expected. Holds a lot of coffee, which I guess is a plus."}, {"id": "r4", "product_id": "p1", "rating": 5, "date": "2026-09-15", "text": "Survived a year of daily dishwasher runs. Glaze still perfect."}, {"id": "r5", "product_id": "p2", "rating": 5, "date": "2026-10-18", "text": "The blue is even prettier in person. Perfect ramen bowls."}, {"id": "r6", "product_id": "p2", "rating": 4, "date": "2026-10-02", "text": "Gorgeous color. One bowl had a tiny glaze drip on the base, did not bother me."}, {"id": "r7", "product_id": "p2", "rating": 5, "date": "2026-09-21", "text": "We use them every night. They stack neatly in our tiny kitchen."}, {"id": "r8", "product_id": "p3", "rating": 5, "date": "2026-10-25", "text": "Bought five in different colors for my bridesmaids. Everyone cried a little."}, {"id": "r9", "product_id": "p3", "rating": 5, "date": "2026-10-09", "text": "Cute, tiny, perfect for one rose on my desk."}, {"id": "r10", "product_id": "p3", "rating": 5, "date": "2026-09-30", "text": "Best gift under $25 I have found. Packaging was lovely."}, {"id": "r11", "product_id": "p3", "rating": 4, "date": "2026-09-12", "text": "Smaller than I pictured, but really well made."}, {"id": "r12", "product_id": "p4", "rating": 5, "date": "2026-10-16", "text": "Makes my weekend coffee feel like a ritual. Even extraction, no bitterness."}, {"id": "r13", "product_id": "p4", "rating": 4, "date": "2026-09-25", "text": "Beautiful set. Shipping took 9 days, worth the wait."}, {"id": "r14", "product_id": "p5", "rating": 5, "date": "2026-10-13", "text": "My pothos looks so happy. Love that the saucer is included."}, {"id": "r15", "product_id": "p5", "rating": 3, "date": "2026-09-19", "text": "Nice planter but the matte finish shows water marks."}, {"id": "r16", "product_id": "p6", "rating": 5, "date": "2026-10-26", "text": "Ordered as a thank-you gift. The handwritten note made it so personal."}, {"id": "r17", "product_id": "p6", "rating": 5, "date": "2026-10-21", "text": "The candle smells like a cabin in the woods, and the cup becomes a mini planter after."}, {"id": "r18", "product_id": "p6", "rating": 4, "date": "2026-10-19", "text": "Lovely box. Wish there were more scent options."}], "posts": [{"id": "h1", "date": "2026-09-08", "channel": "instagram", "product_id": "p1", "angle": "product_feature", "caption": "Thick walls, hot coffee, zero two-handed reheats. Meet the Speckled Morning Mug.", "impressions": 2100, "clicks": 38, "orders": 1, "revenue": 34}, {"id": "h2", "date": "2026-09-12", "channel": "tiktok", "product_id": "p3", "angle": "behind_the_scenes", "caption": "Throwing 40 tiny vases before lunch. Watch the last one collapse.", "impressions": 9800, "clicks": 210, "orders": 7, "revenue": 154}, {"id": "h3", "date": "2026-09-17", "channel": "instagram", "product_id": "p2", "angle": "discount_offer", "caption": "15% off Ocean bowls this weekend only. Code OCEAN15.", "impressions": 2600, "clicks": 95, "orders": 2, "revenue": 104}, {"id": "h4", "date": "2026-09-22", "channel": "instagram", "product_id": "p1", "angle": "customer_story", "caption": "Dana has used the same mug every morning for a year. Here is what it looks like now.", "impressions": 2400, "clicks": 72, "orders": 4, "revenue": 136}, {"id": "h5", "date": "2026-09-26", "channel": "tiktok", "product_id": "p4", "angle": "product_feature", "caption": "Why a ceramic dripper changes your pour-over.", "impressions": 5200, "clicks": 88, "orders": 1, "revenue": 89}, {"id": "h6", "date": "2026-10-01", "channel": "tiktok", "product_id": "p1", "angle": "behind_the_scenes", "caption": "No two glazes are the same. Here is why (kiln opening, 60 seconds).", "impressions": 12400, "clicks": 260, "orders": 9, "revenue": 306}, {"id": "h7", "date": "2026-10-05", "channel": "instagram", "product_id": "p5", "angle": "discount_offer", "caption": "Planter sale. 20% off with PLANT20.", "impressions": 2300, "clicks": 81, "orders": 1, "revenue": 46}, {"id": "h8", "date": "2026-10-09", "channel": "instagram", "product_id": "p3", "angle": "ugc_review", "caption": "\"Bought five for my bridesmaids. Everyone cried a little.\" Thank you, Priya.", "impressions": 2700, "clicks": 66, "orders": 3, "revenue": 66}, {"id": "h9", "date": "2026-10-14", "channel": "tiktok", "product_id": "p2", "angle": "behind_the_scenes", "caption": "Dipping bowls in our ocean glaze. It goes on grey and comes out blue.", "impressions": 10100, "clicks": 198, "orders": 6, "revenue": 348}, {"id": "h10", "date": "2026-10-18", "channel": "instagram", "product_id": "p6", "angle": "gift_idea", "caption": "The gift box for the person who says they want nothing.", "impressions": 3100, "clicks": 92, "orders": 5, "revenue": 320}, {"id": "h11", "date": "2026-10-22", "channel": "instagram", "product_id": "p1", "angle": "customer_story", "caption": "A teacher, 7am, and the mug that keeps her coffee warm through first period.", "impressions": 2500, "clicks": 70, "orders": 3, "revenue": 102}, {"id": "h12", "date": "2026-10-27", "channel": "tiktok", "product_id": "p6", "angle": "gift_idea", "caption": "Packing 30 holiday boxes and writing every note by hand.", "impressions": 8600, "clicks": 150, "orders": 4, "revenue": 256}], "angles": {"behind_the_scenes": "Behind the scenes", "customer_story": "Customer story", "ugc_review": "Review quote", "gift_idea": "Gift idea", "product_feature": "Product feature", "discount_offer": "Discount offer"}};
+const S = { plan: 'free', left: 3, page: 'landing', tab: 'home', gens: 0, posted: false, wiz: { step: 1, product: 'p6', channel: 'tiktok', angle: 'behind_the_scenes', post: null, variant: null, published: false } };
+const LIMIT = { free: 10, pro: 300 };
+const $ = (s) => document.querySelector(s);
+const $$ = (s) => [...document.querySelectorAll(s)];
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const money = (n) => '$' + n.toLocaleString('en-US');
+const product = (id) => D.products.find((p) => p.id === id);
+const ch = (c) => ({ tiktok: 'TikTok', instagram: 'Instagram', facebook: 'Facebook' }[c] || c);
+const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
+
+// Same numbers as the runnable app: last 30 days up to the demo date, compared with the 30 days before.
+const DAY = 864e5;
+const asOf = Date.parse(D.as_of) + DAY - 1;
+const day = (ms) => new Date(ms).toISOString().slice(0, 10);
+function stats(list) {
+  const sum = (k) => list.reduce((s, p) => s + p[k], 0);
+  return { posts: list.length, clicks: sum('clicks'), orders: sum('orders'), revenue: sum('revenue'), avg: list.length ? Math.round((sum('orders') / list.length) * 10) / 10 : 0 };
+}
+function group(list, key, label) {
+  const g = {};
+  list.forEach((p) => (g[p[key]] ||= []).push(p));
+  return Object.entries(g).map(([k, l]) => ({ key: k, name: label(k), ...stats(l), perPost: Math.round(stats(l).revenue / l.length) })).sort((a, b) => b.avg - a.avg);
+}
+function summary(days = 30) {
+  const cut = day(asOf - days * DAY);
+  const prevCut = day(asOf - 2 * days * DAY);
+  const cur = D.posts.filter((p) => p.date > cut);
+  const prev = D.posts.filter((p) => p.date > prevCut && p.date <= cut);
+  const t = stats(cur);
+  const b = stats(prev);
+  const pct = (k) => (b[k] ? Math.round(((t[k] - b[k]) / b[k]) * 100) : null);
+  const byAngle = group(cur, 'angle', (k) => D.angles[k]);
+  const byChannel = group(cur, 'channel', ch);
+  const byProduct = group(cur, 'product_id', (k) => product(k).name).sort((a, b2) => b2.perPost - a.perPost);
+  const top = [...cur].sort((a, b2) => b2.orders - a.orders)[0];
+  return { t, change: { orders: pct('orders'), revenue: pct('revenue'), clicks: pct('clicks') }, byAngle, byChannel, byProduct, top, findings: [
+    `${byAngle[0].name} posts bring ${byAngle[0].avg} orders each, ${Math.round((byAngle[0].avg / t.avg) * 10) / 10}x the average of ${t.avg}.`,
+    `${byChannel[0].name} brings ${byChannel[0].avg} orders per post; ${byChannel.at(-1).name} brings ${byChannel.at(-1).avg}.`,
+    `${byProduct[0].name} earns the most per post: $${byProduct[0].perPost}.`,
+    `${byAngle.at(-1).name} posts bring the least: ${plural(byAngle.at(-1).avg, 'order')} each.`,
+  ] };
+}
+const S30 = summary(30);
+const S90 = summary(90);
+const latest = [...D.posts].sort((a, b) => b.date.localeCompare(a.date))[0];
+const REC = { product: 'p6', channel: 'tiktok', angle: 'behind_the_scenes', reason: 'Holiday Gift Box (Mug + Candle) earns $288 per post and has 80 in stock. Behind the scenes posts bring 7.3 orders each.' };
+const REC_FREE = { product: 'p3', channel: 'instagram', angle: 'ugc_review', reason: 'Mini Bud Vase is rated 4.9 from 341 reviews, so real customer quotes make an easy first post.' };
+const rec = () => (S.plan === 'pro' ? REC : REC_FREE);
+const pill = (v) => (v == null ? '' : `<span class="pill ${v > 5 ? 'good' : v < -5 ? 'bad' : ''}">${v > 0 ? '+' : ''}${v}%</span>`);
+const HOW = '<details class="how small"><summary>How orders are counted</summary><p>An order counts for a post when the customer uses that post\'s discount code. Without a code, it counts for the last tracked link they clicked in the 30 days before buying. Bots and repeat clicks are ignored.</p></details>';
+
+function go(page) { S.page = page; $$('.page').forEach((p) => p.classList.toggle('on', p.id === 'p-' + page)); render(); window.scrollTo(0, 0); }
+function tab(t) { S.tab = t; render(); window.scrollTo(0, 0); }
+function render() {
+  $$('[data-plan]').forEach((b) => b.classList.toggle('on', b.dataset.plan === S.plan));
+  $('#pc-credits').textContent = `Credits left: ${S.left}/${LIMIT[S.plan]}`;
+  $('#plan-pill').textContent = S.plan === 'pro' ? 'Pro' : 'Free';
+  $('#plan-pill').className = 'pill ' + (S.plan === 'pro' ? 'accent' : '');
+  $('#credits').textContent = `${S.left}/${LIMIT[S.plan]} credits`;
+  $('#meter span').style.width = (S.left / LIMIT[S.plan]) * 100 + '%';
+  $('#meter').classList.toggle('low', S.left <= 1);
+  $$('.tab').forEach((b) => b.classList.toggle('active', b.dataset.tab === S.tab));
+  $$('.tabp').forEach((p) => { p.hidden = p.id !== 't-' + S.tab; });
+  if (S.tab === 'home') renderHome();
+  if (S.tab === 'write') renderWizard();
+  if (S.tab === 'results') renderResults();
+  if (S.tab === 'plan') renderPlan();
+  renderChips();
+}
+
+// ---------- home ----------
+function renderHome() {
+  const r = rec();
+  const p = product(r.product);
+  let main;
+  if (S.plan === 'pro') {
+    const { t, change, top } = S30;
+    main = `<div class="card headline-card"><p class="headline">Your posts brought <b>${t.orders} orders</b> and <b>${money(t.revenue)}</b> in the last 30 days, up ${change.orders}% on the 30 days before.</p>${HOW}</div>
+      <div class="grid g4">
+        <div class="card tile"><div class="label">Orders</div><div class="value">${t.orders}</div>${pill(change.orders)}</div>
+        <div class="card tile"><div class="label">Revenue</div><div class="value">${money(t.revenue)}</div>${pill(change.revenue)}</div>
+        <div class="card tile"><div class="label">Link clicks</div><div class="value">${t.clicks}</div>${pill(change.clicks)}</div>
+        <div class="card tile"><div class="label">Posts</div><div class="value">${t.posts}</div><span class="small faint">${money(Math.round(t.revenue / t.posts))} per post</span></div>
+      </div>
+      <div class="card"><h3>What sells for you</h3><ul class="findings">${S30.findings.map((f) => `<li>${esc(f)}</li>`).join('')}</ul><div class="row"><button class="btn sm" data-tab="results">See every post</button><button class="btn sm ghost" onclick="play(0)">Ask why</button></div></div>
+      <div class="card"><div class="row spread"><h3 style="margin:0">Best post</h3><span class="small faint">${top.date} · ${ch(top.channel)} · ${D.angles[top.angle]}</span></div><p class="quote">${esc(top.caption)}</p><div class="row small"><b>${top.orders} orders · ${money(top.revenue)}</b><span class="muted">${esc(product(top.product_id).name)}</span><span class="pill good">+${Math.round(((top.orders - t.avg) / t.avg) * 100)}% vs your average</span></div></div>`;
+  } else {
+    main = `<div class="card headline-card"><p class="headline">${S.posted ? 'Your latest post (Mini Bud Vase on Instagram) is live. Clicks and orders show up here as they come in.' : `Your latest post (${esc(product(latest.product_id).name)}, ${latest.date}) brought <b>${latest.orders} orders</b> worth <b>${money(latest.revenue)}</b> from ${latest.clicks} clicks.`}</p>${HOW}</div>
+      <div class="card lock-teaser"><div class="lock-icon">🔒</div><div><b>See which of your ${D.posts.length} posts sell</b><p class="small muted" style="margin:4px 0 10px">Free shows your latest post. Pro shows totals, which styles and channels bring orders, and your best posts.</p><button class="btn sm primary" onclick="paywall('feature')">Unlock all results</button></div></div>`;
+  }
+  const steps = [['Connect your shop', true], ['Write your first post', S.gens > 0], ['Post it and put the link in your bio', S.posted], ['Get your first tracked click', false]];
+  $('#t-home').innerHTML = `
+    <div class="row spread" style="margin-bottom:12px"><div><h2 style="margin:0">Hi ${esc(D.merchant.owner)}</h2><p class="small muted" style="margin:0">${esc(D.merchant.name)}</p></div>${S.plan === 'pro' ? '<select style="width:auto"><option>Last 30 days</option><option>Last 7 days</option><option>Last 90 days</option></select>' : ''}</div>
+    <div class="grid side-r-wide" style="align-items:start">
+      <div class="stack">${main}</div>
+      <div class="stack">
+        <div class="card next-card"><div class="label">Next post</div><h3 style="margin:4px 0">${esc(p.name)}</h3><div class="small muted">${ch(r.channel)} · ${D.angles[r.angle]}</div><p class="small" style="margin:8px 0 12px">${esc(r.reason)}</p><button class="btn primary" onclick="writeRec()">Write this post</button></div>
+        ${S.plan === 'pro' ? '' : `<div class="card"><h3>Getting started</h3><ol class="checklist">${steps.map(([l, d]) => `<li class="${d ? 'done' : ''}">${l}</li>`).join('')}</ol></div>`}
+        ${S.posted ? '<div class="card"><h3>Waiting for the first click</h3><div class="small row spread"><span>Mini Bud Vase · Instagram</span><span class="faint">today</span></div><p class="small faint" style="margin:6px 0 0">Check the link is in your bio. Clicks usually start within a day.</p></div>' : ''}
+      </div>
+    </div>`;
+}
+function writeRec() { const r = rec(); Object.assign(S.wiz, { step: 2, product: r.product, channel: r.channel, angle: r.angle, post: null, variant: null, published: false }); tab('write'); }
+
+// ---------- write ----------
+function makePost(pid, channel) {
+  const p = product(pid);
+  const code = 'JC-' + Math.random().toString(36).slice(2, 6).toUpperCase();
+  const link = 'lumi.link/' + Math.random().toString(36).slice(2, 8);
+  const inCaption = channel === 'facebook';
+  const tail = inCaption ? `Shop: ${link} · code ${code} for 10% off.` : `Use ${code} for 10% off. Link in bio.`;
+  const review = (D.reviews.find((r) => r.product_id === pid) || { text: 'Lovely.' }).text;
+  return { id: 'post_' + code.slice(3).toLowerCase(), pid, channel, code, link, inCaption, versions: [
+    { label: 'Behind the scenes', caption: `Packing these by hand tonight. Every ${p.name.toLowerCase()} gets a handwritten note, because that is the part people remember.\n\n${tail}`, tags: '#handmade #ceramics #smallbusiness' },
+    { label: 'Customer voice', caption: `"${review}"\n\nThat is why we keep making the ${p.name}. ${money(p.price)}. ${tail}`, tags: '#customerlove #handmade' },
+    { label: 'Gift idea', caption: `For the person who says they want nothing: the ${p.name}. ${p.selling_points[0]}.\n\n${tail}`, tags: '#giftidea #shopsmall' },
+  ] };
+}
+function renderWizard() {
+  const w = S.wiz;
+  $$('#stepper li').forEach((li) => { const n = +li.dataset.s; li.className = n < w.step ? 'done' : n === w.step ? 'current' : ''; });
+  const r = rec();
+  const box = $('#wizard');
+  if (w.step === 1) {
+    const list = [...D.products].sort((a, b) => (b.id === r.product) - (a.id === r.product));
+    box.innerHTML = `<div class="card wiz-card"><h2>What do you want to sell?</h2><div class="stack">${list.map((p) => `<button class="choice ${p.id === w.product ? 'on' : ''}" onclick="S.wiz.product='${p.id}'; renderWizard()"><div class="row spread"><b>${esc(p.name)}</b><span>${money(p.price)}</span></div><div class="small faint">${p.stock} in stock · ${p.rating} ★ from ${p.review_count} reviews</div>${p.id === r.product ? `<div class="small suggest"><span class="pill good">Suggested</span> ${esc(r.reason)}</div>` : ''}</button>`).join('')}</div><div class="wiz-actions"><span></span><button class="btn primary" onclick="S.wiz.step=2; renderWizard()">Continue</button></div></div>`;
+  }
+  if (w.step === 2) {
+    const ranked = S.plan === 'pro' ? S90.byAngle : null;
+    const angles = Object.entries(D.angles).map(([id, label]) => ({ id, label, g: ranked?.find((x) => x.key === id) }));
+    if (ranked) angles.sort((a, b) => (b.g?.avg ?? -1) - (a.g?.avg ?? -1));
+    box.innerHTML = `<div class="card wiz-card"><div class="small muted">${esc(product(w.product).name)} · <a href="#" onclick="S.wiz.step=1; renderWizard(); return false">change</a></div>
+      <h2>Where will you post it?</h2><div class="row">${[['instagram', 'Instagram', 'connected'], ['tiktok', 'TikTok', 'connected'], ['facebook', 'Facebook', '']].map(([id, l, n]) => `<button class="choice inline ${id === w.channel ? 'on' : ''}" onclick="S.wiz.channel='${id}'; renderWizard()">${l} ${n ? `<span class="small faint">${n}</span>` : ''}</button>`).join('')}</div>
+      <p class="small muted" style="margin-top:8px">${w.channel === 'facebook' ? 'The tracked link goes right in the post.' : `Links in ${ch(w.channel)} captions can't be tapped, so each version carries its own discount code to track sales, and the tracked link goes in your bio.`}</p>
+      <h2 style="margin-top:18px">How should it sound?</h2><div class="stack">${angles.map((a, i) => `<button class="choice ${a.id === w.angle ? 'on' : ''}" onclick="S.wiz.angle='${a.id}'; renderWizard()"><div class="row spread"><span>${a.label}</span>${ranked ? (a.g ? `<span class="small ${i === 0 ? 'pill good' : 'faint'}">${i === 0 ? 'Sells best · ' : ''}${a.g.avg} orders per post</span>` : '<span class="small faint">not tried yet</span>') : ''}</div></button>`).join('')}</div>
+      ${ranked ? '<p class="small faint" style="margin-top:6px">Ranked by orders per post in your shop, last 90 days.</p>' : '<p class="small muted" style="margin-top:6px">🔒 Pro ranks these styles by what actually sold in your shop. <a href="#" onclick="paywall(\'feature\'); return false">See how</a></p>'}
+      <div class="wiz-actions"><button class="btn ghost" onclick="S.wiz.step=1; renderWizard()">Back</button><div class="row" style="gap:8px"><span class="small faint">${S.left} of ${LIMIT[S.plan]} credits left</span><button class="btn primary" onclick="generate()">Write 3 versions · 1 credit</button></div></div></div>`;
+  }
+  if (w.step === 3) {
+    if (!w.post) { box.innerHTML = '<div class="card wiz-card"><p><span class="spinner"></span> Writing 3 versions from your reviews and what has sold before…</p></div>'; return; }
+    box.innerHTML = `<div class="card"><h2 style="margin:0">Pick the version you like</h2><p class="small muted">${esc(product(w.post.pid).name)} · ${ch(w.post.channel)} · discount code <b class="mono">${w.post.code}</b> (10% off) is already in each one</p>
+      <div class="grid g3">${w.post.versions.map((v, i) => `<div class="variant"><span class="pill">Version ${i + 1} · ${v.label}</span><div class="caption">${esc(v.caption)}</div><div class="small faint">${v.tags}</div><div class="row" style="margin-top:auto"><button class="btn sm primary" onclick="S.wiz.variant=${i}; S.wiz.step=4; renderWizard()">Use this version</button><button class="btn sm ghost" onclick="openDrawer(); play(2)">Change it</button></div></div>`).join('')}</div></div>`;
+  }
+  if (w.step === 4) {
+    const v = w.post.versions[w.variant];
+    if (w.published) {
+      box.innerHTML = `<div class="card wiz-card done-card"><h2>Posted. Nice.</h2><p>Lumi is now watching the code <b class="mono">${w.post.code}</b> and your tracked link. Clicks and orders show up on Home, usually within a day.</p><div class="row"><button class="btn primary" data-tab="home">Go to Home</button><button class="btn" onclick="Object.assign(S.wiz,{step:1,post:null,published:false}); renderWizard()">Write another post</button></div></div>`;
+      return;
+    }
+    box.innerHTML = `<div class="card wiz-card"><h2>Post it on ${ch(w.post.channel)}</h2><ol class="post-steps">
+      <li><b>Copy the caption</b><div class="caption-box">${esc(v.caption)}\n\n${v.tags}</div><button class="btn sm" onclick="toast('Caption copied')">Copy caption</button></li>
+      ${w.post.inCaption ? `<li><b>The tracked link is already in the caption</b></li>` : `<li><b>Put the tracked link in your bio</b> or on a story link sticker. The code in the caption still tracks the sale.<div class="row" style="margin-top:6px"><code class="link-box">${w.post.link}</code><button class="btn sm" onclick="toast('Link copied')">Copy link</button></div></li>`}
+      <li><b>Post it</b> on ${ch(w.post.channel)}, then come back and press the button.</li></ol>
+      <div class="wiz-actions"><button class="btn ghost" onclick="S.wiz.step=3; renderWizard()">Back to versions</button><button class="btn primary" onclick="S.wiz.published=true; S.posted=true; renderWizard()">I've posted it</button></div></div>`;
+  }
+}
+function generate() {
+  if (S.left <= 0) { paywall('quota'); return; }
+  S.wiz.step = 3; S.wiz.post = null; renderWizard();
+  setTimeout(() => {
+    S.left -= 1; S.gens += 1;
+    S.wiz.post = makePost(S.wiz.product, S.wiz.channel);
+    render();
+    if (S.left === 0 && S.plan === 'free') setTimeout(() => paywall('quota'), 900);
+  }, 900);
+}
+
+// ---------- results ----------
+function table(list) {
+  return `<div class="table-wrap"><table class="posts"><thead><tr><th>Date</th><th>Post</th><th>Style</th><th class="num">Clicks</th><th class="num">Orders</th><th class="num">Revenue</th><th class="num">vs your average</th></tr></thead><tbody>${list.map((p) => {
+    const avg = stats(D.posts).avg;
+    return `<tr><td class="small date" data-label="Date">${p.date}</td><td class="small post-cell">${esc(p.caption)}<div class="faint">${esc(product(p.product_id).name)} · ${ch(p.channel)}</div></td><td class="small" data-label="Style">${D.angles[p.angle]}</td><td class="num" data-label="Clicks">${p.clicks}</td><td class="num" data-label="Orders">${p.orders}</td><td class="num" data-label="Revenue">${money(p.revenue)}</td><td class="num" data-label="vs average">${S.plan === 'pro' ? pill(Math.round(((p.orders - avg) / avg) * 100)) : '–'}</td></tr>`;
+  }).join('')}</tbody></table></div>`;
+}
+function renderResults() {
+  const posts = [...D.posts].sort((a, b) => b.date.localeCompare(a.date));
+  if (S.plan === 'free') {
+    const fake = Array.from({ length: 5 }, () => '<tr class="locked-row"><td>2026-10-00</td><td>Hidden post caption for preview</td><td>Style</td><td class="num">000</td><td class="num">0</td><td class="num">$000</td><td class="num">+00%</td></tr>').join('');
+    $('#r-body').innerHTML = `<div class="card">${table(posts.slice(0, 1))}<div class="lock-overlay"><table>${fake}</table><div class="lock-cta"><div class="card" style="text-align:center; max-width:380px"><b>${posts.length - 1} more posts have results</b><p class="small muted" style="margin:6px 0 10px">Free shows your latest post only. Pro shows every post ranked by orders, plus a weekly review of what to post next.</p><button class="btn primary" onclick="paywall('feature')">Unlock all results</button></div></div></div>${HOW}</div>`;
+    return;
+  }
+  const all = stats(D.posts);
+  const byAngle = group(D.posts, 'angle', (k) => D.angles[k]);
+  const max = byAngle[0].avg;
+  $('#r-body').innerHTML = `
+    <div class="card headline-card" style="margin-bottom:16px"><p class="headline">${all.posts} posts brought <b>${all.orders} orders</b> and <b>${money(all.revenue)}</b>. ${byAngle[0].name} posts sell best: ${byAngle[0].avg} orders each, ${Math.round((byAngle[0].avg / all.avg) * 10) / 10}× your average.</p><div class="row"><button class="btn sm primary" onclick="S.wiz.angle='${byAngle[0].key}'; S.wiz.step=1; tab('write')">Write a ${byAngle[0].name.toLowerCase()} post</button><button class="btn sm" onclick="openDrawer(); play(0)">Ask Lumi for a review</button></div>${HOW}</div>
+    <div class="grid side-r-wide" style="align-items:start">
+      <div class="card"><h3>Every post</h3>${table(posts)}</div>
+      <div class="card"><h3>Orders per post, by style</h3>${byAngle.map((g) => `<div class="small" style="margin:8px 0"><div class="row spread"><span>${g.name}</span><span class="muted">${g.avg} order${g.avg === 1 ? '' : 's'} per post · ${plural(g.posts, 'post')}</span></div><div class="bar-track" style="margin-top:3px"><div class="bar" style="width:${(g.avg / max) * 100}%"></div></div></div>`).join('')}<div class="small faint">Your average: ${all.avg} orders per post.</div></div>
+    </div>`;
+}
+
+// ---------- assistant (scripted, same tools as the app) ----------
+const LABELS = { get_results_summary: 'Checked your results', propose_post: 'Suggested a post', generate_post: 'Wrote 3 versions', revise_post: 'Rewrote the version', create_tracked_link: 'Made a tracked link' };
+let chatPost = null;
+const SCRIPTS = [
+  {
+    ask: 'How did my posts do this month?',
+    steps: [{ tool: 'get_results_summary', args: { days: 30 } }],
+    card: () => S.plan === 'pro'
+      ? `<div class="card tight small"><b>Last 30 days: ${S30.t.orders} orders · ${money(S30.t.revenue)} · ${S30.t.posts} posts</b> ${pill(S30.change.orders)}<ul class="findings">${S30.findings.map((f) => `<li>${esc(f)}</li>`).join('')}</ul></div>`
+      : `<div class="card tight small">Latest post: <b>${esc(product(latest.product_id).name)}</b>, ${latest.date}: ${latest.clicks} clicks, ${latest.orders} orders.<div class="row spread" style="margin-top:8px"><span class="muted">Totals and rankings are on Pro.</span><button class="btn sm primary" onclick="paywall('feature')">See all results</button></div></div>`,
+    forUser: () => S.plan !== 'pro',
+    reply: () => S.plan === 'pro'
+      ? `**${S30.t.orders} orders and ${money(S30.t.revenue)}** from ${S30.t.posts} posts, up ${S30.change.orders}% on orders.\n\n- ${S30.findings[0]}\n- ${S30.findings[1]}\n- ${S30.findings[2]}\n\nNext: write one more behind-the-scenes post. The Holiday Gift Box is a good fit.`
+      : `On Free I can see your latest post only: the **Holiday Gift Box TikTok (Oct 27)** got 150 clicks and 4 orders, $256.\n\nResults for your other ${D.posts.length - 1} posts, totals and rankings are on Pro.`,
+  },
+  {
+    ask: 'Write me a new post',
+    steps: [{ tool: 'get_results_summary', args: { days: 30 } }, { tool: 'propose_post', args: { product_id: 'p6', channel: 'tiktok', angle: 'behind_the_scenes', reason: REC.reason } }],
+    card: () => `<div class="card proposal"><div class="label">Suggested post</div><h3 style="margin:4px 0">Holiday Gift Box (Mug + Candle)</h3><div class="small muted">TikTok · Behind the scenes · $64, 80 in stock</div><p class="small" style="margin:8px 0 12px">${esc(REC.reason)}</p><div class="row"><button class="btn primary sm" onclick="accept(this)">Write 3 versions · 1 credit</button><span class="small faint">or tell me what to change</span></div></div>`,
+    forUser: () => true,
+    reply: () => 'Behind-the-scenes posts sell best for you, and the Gift Box earns the most per post with stock to spare. Press the button if it looks right; nothing is charged until you do.',
+  },
+  {
+    ask: 'Make version 2 shorter',
+    needsPost: true,
+    steps: [{ tool: 'revise_post', args: { variant: 2, instruction: 'shorter' } }],
+    card: () => { chatPost.versions[1].caption = `"${(D.reviews.find((r) => r.product_id === chatPost.pid) || { text: 'Lovely.' }).text}"\n\nUse ${chatPost.code} for 10% off. Link in bio.`; return versionsCard(chatPost, 1); },
+    forUser: () => true,
+    reply: () => 'Done: version 2 is now just the review quote and the code. Editing is free, no credit used.',
+  },
+  {
+    ask: 'Give me a tracked link for the Mini Bud Vase for my Instagram bio',
+    steps: [{ tool: 'create_tracked_link', args: { product_id: 'p3', channel: 'instagram', placement: 'bio' } }],
+    card: () => '<div class="card tight trackbox"><b>Mini Bud Vase</b> · Instagram · for your bio<br><span class="mono">lumi.link/bv3k9q</span><br>Code <b class="mono">JC-BIO7</b> gives 10% off and tracks orders without a click.</div>',
+    forUser: () => true,
+    reply: () => 'Put **lumi.link/bv3k9q** in your bio. Clicks and orders from it show up separately from your posts. Links are free, no credit used.',
+  },
+];
+function versionsCard(post, highlight) {
+  return `<div class="card tight"><div class="small"><b>${esc(product(post.pid).name)}</b> · ${ch(post.channel)} · code <b class="mono">${post.code}</b> · link goes in your bio</div><div class="stack" style="margin-top:8px">${post.versions.map((v, i) => `<div class="variant ${i === highlight ? 'chosen' : ''}"><span class="pill">Version ${i + 1} · ${v.label}</span><div class="caption">${esc(v.caption)}</div><div class="row"><button class="btn sm primary" onclick="useFromChat(${i})">Use this version</button></div></div>`).join('')}</div></div>`;
+}
+function useFromChat(i) { Object.assign(S.wiz, { post: chatPost, product: chatPost.pid, channel: chatPost.channel, variant: i, step: 4, published: false }); tab('write'); }
+async function accept(btn) {
+  if (playing) return;
+  if (S.left <= 0) { paywall('quota'); return; }
+  btn.disabled = true; btn.textContent = 'Writing…';
+  addMsg('user', 'Yes, write it.');
+  const bot = addMsg('bot', '');
+  await step(bot, { tool: 'generate_post', args: { proposal_id: 'prop_7f3a' } });
+  S.left -= 1; S.gens += 1; render();
+  chatPost = makePost('p6', 'tiktok');
+  const c = document.createElement('div'); c.innerHTML = versionsCard(chatPost); bot.appendChild(c);
+  await type(bot, 'Here are 3 versions, each with its own discount code. The tracked link goes in your bio. Pick one to get the posting checklist.');
+  btn.textContent = 'Written below';
+}
+function renderChips() { $('#chips').innerHTML = SCRIPTS.map((s, i) => `<button class="chip" onclick="play(${i})">${esc(s.ask)}</button>`).join(''); }
+let playing = false;
+async function step(bot, st) {
+  const d = document.createElement('details');
+  d.className = 'step';
+  d.innerHTML = `<summary><span class="spinner"></span><span>${LABELS[st.tool]}…</span><code class="faint small">${st.tool}</code></summary><div class="step-body"><pre>arguments: ${esc(JSON.stringify(st.args, null, 2))}</pre></div>`;
+  bot.appendChild(d); scroll();
+  await wait(700);
+  d.querySelector('.spinner').outerHTML = '<span class="pill good">done</span>';
+  return d;
+}
+async function type(bot, text) {
+  const t = document.createElement('div'); t.className = 'text typing'; bot.appendChild(t);
+  for (let k = 0; k <= text.length; k += 6) { t.innerHTML = md(text.slice(0, k)); scroll(); await wait(12); }
+  t.innerHTML = md(text); t.classList.remove('typing');
+}
+async function play(i) {
+  if (playing) return;
+  openDrawer();
+  const s = SCRIPTS[i];
+  if (s.needsPost && !chatPost) { addMsg('user', esc(s.ask)); addMsg('bot', '<div class="text"><p>Ask me to write a post first, then I can change it.</p></div>'); return; }
+  playing = true;
+  addMsg('user', esc(s.ask));
+  const bot = addMsg('bot', '');
+  let last;
+  for (const st of s.steps) last = await step(bot, st);
+  const c = document.createElement('div');
+  c.innerHTML = s.card();
+  if (s.forUser()) bot.appendChild(c); else last.querySelector('.step-body').prepend(c);
+  await type(bot, s.reply());
+  playing = false;
+}
+function md(s) {
+  return esc(s).split('\n\n').map((b) => {
+    const inl = (x) => x.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
+    if (b.split('\n').every((l) => /^- /.test(l))) return `<ul>${b.split('\n').map((l) => `<li>${inl(l.slice(2))}</li>`).join('')}</ul>`;
+    return `<p>${inl(b).replace(/\n/g, '<br>')}</p>`;
+  }).join('');
+}
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+const scroll = () => { const m = $('#msgs'); m.scrollTop = m.scrollHeight; };
+function addMsg(who, html) { const el = document.createElement('div'); el.className = 'msg ' + who; el.innerHTML = html; $('#msgs').appendChild(el); scroll(); return el; }
+function resetChat() { $('#msgs').innerHTML = ''; chatPost = null; addMsg('bot', '<div class="text"><p>Hi Maya. Ask me how your posts are doing, what to post next, or to change a post. The steps I take show under my answer; tap one to see the details.</p></div>'); }
+function openDrawer() { document.body.classList.add('drawer-open'); }
+$('#fab').addEventListener('click', openDrawer);
+$('#drawer-close').addEventListener('click', () => document.body.classList.remove('drawer-open'));
+
+// ---------- plan / paywall ----------
+function renderPlan() {
+  $('#plan-body').innerHTML = `<div class="grid g2" style="align-items:start"><div class="card"><h2>Your plan: ${S.plan === 'pro' ? 'Pro' : 'Free'}</h2><p class="muted">Writing a post uses 1 credit; changing one is free. Credits reset on the 1st.</p><div class="table-wrap"><table>
+    <tr><th></th><th>Free</th><th>Pro</th></tr>
+    <tr><td>Price</td><td>$0</td><td><b>$29</b>/month or $24/month yearly</td></tr>
+    <tr><td>Posts per month</td><td>10</td><td>300 + $9 for 200 more</td></tr>
+    <tr><td>Tracked links and codes</td><td>Yes</td><td>Yes</td></tr>
+    <tr><td>Results</td><td>Latest post only</td><td>Every post, ranked</td></tr>
+    <tr><td>Weekly review</td><td>–</td><td>Yes</td></tr></table></div>
+    <div style="margin-top:14px">${S.plan === 'pro' ? '<span class="pill good">You are on Pro</span>' : '<button class="btn primary" onclick="paywall(\'manual\')">Upgrade to Pro</button>'}</div></div>
+    <div class="card"><h3>Connected accounts</h3><div class="account"><b>Shopify</b><span class="muted">Juniper &amp; Clay · 6 products</span><span class="pill good">connected</span></div><div class="account"><b>Instagram</b><span class="muted">@juniperandclay</span><span class="pill good">connected</span></div><div class="account"><b>TikTok</b><span class="muted">@juniperandclay</span><span class="pill good">connected</span></div><p class="small faint" style="margin-top:10px">Lumi never posts for you; you post, then tell Lumi.</p></div></div>`;
+}
+function paywall(trigger) {
+  $('#pw-title').textContent = { quota: `You've used all ${LIMIT.free} free posts this month`, feature: 'See which posts actually sell', manual: 'Upgrade to Lumi Pro' }[trigger];
+  $('#pw-sub').textContent = trigger === 'quota' ? 'Your credits reset on the 1st. Or keep going now with Pro.' : 'Free shows results for your latest post. Pro shows all of them, ranked by orders.';
+  $('#paywall').classList.add('open');
+}
+document.addEventListener('click', (e) => {
+  if (e.target.matches('[data-close]')) e.target.closest('.modal-bg').classList.remove('open');
+  if (e.target.matches('[data-upgrade]')) { $('#paywall').classList.remove('open'); S.plan = 'pro'; S.left = 300 - S.gens; render(); toast('Welcome to Pro. Payment simulated.'); }
+  if (e.target.dataset.go) go(e.target.dataset.go);
+  if (e.target.closest('[data-tab]')) tab(e.target.closest('[data-tab]').dataset.tab);
+  if (e.target.dataset.plan) { S.plan = e.target.dataset.plan; S.left = S.plan === 'pro' ? 300 : 3; render(); }
+});
+function toast(t) { let el = document.querySelector('.toast'); if (!el) { el = document.createElement('div'); el.className = 'toast'; document.body.appendChild(el); } el.textContent = t; el.classList.add('show'); setTimeout(() => el.classList.remove('show'), 2200); }
+$('#pc-use').addEventListener('click', () => { S.left = 0; render(); toast('Credits used up. Try writing a post.'); });
+$('#pc-metrics').addEventListener('click', () => { go('app'); S.tab = 'metrics'; render(); });
+$('#pc-reset').addEventListener('click', () => { Object.assign(S, { plan: 'free', left: 3, tab: 'home', gens: 0, posted: false }); Object.assign(S.wiz, { step: 1, product: 'p6', channel: 'tiktok', angle: 'behind_the_scenes', post: null, variant: null, published: false }); resetChat(); go('landing'); });
+
+resetChat();
+const start = location.hash.slice(1);
+if (['home', 'write', 'results', 'plan', 'metrics'].includes(start)) { S.tab = start; go('app'); } else go('landing');
+</script>
+</body>
+</html>

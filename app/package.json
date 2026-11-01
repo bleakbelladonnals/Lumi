@@ -1,0 +1,21 @@
+{
+  "name": "lumi-v2",
+  "version": "1.0.0",
+  "description": "Lumi v2: see which posts bring orders. Runnable agent demo.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test test/app.test.js",
+    "eval": "node eval/run.js",
+    "reset": "node -e \"require('fs').rmSync('data/db.json',{force:true});console.log('Demo data cleared')\""
+  },
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.22.3",
+    "openai": "^4.104.0"
+  },
+  "private": true,
+  "engines": {
+    "node": ">=20"
+  }
+}
